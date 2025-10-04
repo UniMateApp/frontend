@@ -37,8 +37,19 @@ export default function EventsScreen() {
     setBookmarks(prev => ({ ...prev, [eventId]: !prev[eventId] }));
   };
 
+  const reload = async () => {
+    try {
+      const remote = await apiListEvents();
+      if (Array.isArray(remote)) {
+        setEventsState(remote as any);
+      }
+    } catch (err) {
+      console.warn('Reload failed', err);
+    }
+  };
+
+
   const handleAddEvent = (ev: any) => {
-    // attempt to persist via API
     (async () => {
       try {
         const created = await apiCreateEvent({
@@ -51,11 +62,19 @@ export default function EventsScreen() {
           price: ev.price,
           image_url: typeof ev.image === 'string' ? ev.image : null,
         });
-        // If API returned the created record, prepend it; otherwise use the local event
-        setEventsState(prev => [created || ev, ...prev]);
-      } catch (err) {
-        console.error('Create event failed, falling back to local state', err);
+
+        if (created) {
+          alert('Event added successfully! ID = ' + created.id);
+          await reload(); // ✅ Fetch the latest events from DB
+        } else {
+          console.warn('API did not return the created event object.');
+          setEventsState(prev => [ev, ...prev]);
+          alert('Event added locally, but API did not return a record.');
+        }
+      } catch (err: any) {
+        console.error('Create event failed:', err);
         setEventsState(prev => [ev, ...prev]);
+        alert('Failed to add event: ' + (err?.message || String(err)));
       }
     })();
   };
