@@ -22,6 +22,7 @@ interface EventCardProps {
   onBookmark: () => void;
   onRsvp?: () => void;
   onShare?: () => void;
+  onLongPress?: () => void;
   isBookmarked?: boolean;
 }
 
@@ -42,6 +43,7 @@ export function EventCard({
   onBookmark,
   onRsvp,
   onShare,
+  onLongPress,
   isBookmarked,
 }: EventCardProps) {
   const colorScheme = useColorScheme();
@@ -70,7 +72,7 @@ export function EventCard({
         },
       ]}
     >
-      <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
+      <TouchableOpacity activeOpacity={0.95} onPress={onPress} onLongPress={onLongPress}>
         {source && (
           <View>
             <Image source={source} style={styles.image} resizeMode="cover" />
