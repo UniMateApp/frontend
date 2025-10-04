@@ -4,8 +4,9 @@ import { SearchBar } from '@/components/search-bar';
 import { sampleEvents } from '@/constants/sample-events';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { createEvent as apiCreateEvent, listEvents as apiListEvents } from '@/services/events';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EventsScreen() {
@@ -14,6 +15,8 @@ export default function EventsScreen() {
   const [query, setQuery] = useState('');
   const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({});
   const [eventsState, setEventsState] = useState(sampleEvents);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
   const events = useMemo(() => {
@@ -35,8 +38,48 @@ export default function EventsScreen() {
   };
 
   const handleAddEvent = (ev: any) => {
-    setEventsState(prev => [ev, ...prev]);
+    // attempt to persist via API
+    (async () => {
+      try {
+        const created = await apiCreateEvent({
+          title: ev.title,
+          description: ev.description,
+          category: ev.category,
+          organizer: ev.organizer,
+          start_at: ev.date,
+          location: ev.location,
+          price: ev.price,
+          image_url: typeof ev.image === 'string' ? ev.image : null,
+        });
+        // If API returned the created record, prepend it; otherwise use the local event
+        setEventsState(prev => [created || ev, ...prev]);
+      } catch (err) {
+        console.error('Create event failed, falling back to local state', err);
+        setEventsState(prev => [ev, ...prev]);
+      }
+    })();
   };
+
+  // Fetch events from Supabase on mount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const remote = await apiListEvents();
+        if (mounted && Array.isArray(remote)) {
+          setEventsState(remote as any);
+        }
+      } catch (err: any) {
+        console.error('Failed to load events from Supabase, falling back to sample data', err);
+        setError(err?.message || String(err));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false };
+  }, []);
 
   return (
     <ScrollView

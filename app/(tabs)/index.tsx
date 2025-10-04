@@ -5,6 +5,7 @@ import { SearchBar } from '@/components/search-bar';
 import { sampleEvents } from '@/constants/sample-events';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { createEvent as apiCreateEvent } from '@/services/events';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -45,7 +46,24 @@ export default function HomeScreen() {
   const [showAdd, setShowAdd] = useState(false);
 
   const handleAddEvent = (ev: any) => {
-    setEventsState(prev => [ev, ...prev]);
+    (async () => {
+      try {
+        const created = await apiCreateEvent({
+          title: ev.title,
+          description: ev.description,
+          category: ev.category,
+          organizer: ev.organizer,
+          start_at: ev.date,
+          location: ev.location,
+          price: ev.price,
+          image_url: typeof ev.image === 'string' ? ev.image : null,
+        });
+        setEventsState(prev => [created || ev, ...prev]);
+      } catch (err) {
+        console.error('Create event failed, falling back to local state', err);
+        setEventsState(prev => [ev, ...prev]);
+      }
+    })();
   };
 
   return (
