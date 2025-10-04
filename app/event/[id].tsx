@@ -6,6 +6,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform } from 'react-native';
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -57,13 +58,50 @@ export default function EventDetailsScreen() {
   };
 
   const handleDeleteEvent = async () => {
-    console.log('Delete button clicked, event ID:', id);
-    
+    console.log('=== DELETE BUTTON PRESSED ===');
+    console.log('Event ID:', id);
+
     if (!id) {
-      Alert.alert('Error', 'Event ID is missing');
+      if (Platform.OS === 'web') {
+        window.alert('Error: Event ID is missing');
+      } else {
+        Alert.alert('Error', 'Event ID is missing');
+      }
       return;
     }
 
+    console.log('Updating state:', updating);
+    console.log('Delete button clicked, event ID:', id);
+
+    // 🧩 For Web (Alert is not supported natively)
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to delete this event? This action cannot be undone.');
+      if (!confirmed) {
+        console.log('User cancelled deletion');
+        return;
+      }
+
+      try {
+        console.log('Attempting to delete event with ID:', id);
+        setUpdating(true);
+
+        await deleteEvent(String(id));
+        console.log('Event deleted successfully (Supabase)');
+
+        window.alert('Event deleted successfully!');
+        console.log('Navigating back to events list');
+        router.dismissTo('/(tabs)/events');
+      } catch (err) {
+        console.error('Failed to delete event:', err);
+        const msg = err || 'Failed to delete event';
+        window.alert(`Error: ${msg}`);
+      } finally {
+        setUpdating(false);
+      }
+      return; // stop here for web
+    }
+
+    // 📱 For Mobile (Android / iOS)
     Alert.alert(
       'Delete Event',
       'Are you sure you want to delete this event? This action cannot be undone.',
@@ -76,7 +114,7 @@ export default function EventDetailsScreen() {
             try {
               console.log('Attempting to delete event with ID:', id);
               setUpdating(true);
-              
+
               await deleteEvent(String(id));
               console.log('Event deleted from Supabase');
 
@@ -96,9 +134,6 @@ export default function EventDetailsScreen() {
               );
             } catch (err: any) {
               console.error('Failed to delete event. Full error:', err);
-              console.error('Error message:', err?.message);
-              console.error('Error stack:', err?.stack);
-
               const errorMessage = err?.message || err?.toString() || 'Failed to delete event';
               Alert.alert('Error', `Could not delete event: ${errorMessage}`);
             } finally {
