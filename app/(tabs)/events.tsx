@@ -4,10 +4,10 @@ import { SearchBar } from '@/components/search-bar';
 import { sampleEvents } from '@/constants/sample-events';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createEvent as apiCreateEvent, listEvents as apiListEvents } from '@/services/events';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EventsScreen() {
   const colorScheme = useColorScheme();
@@ -18,6 +18,7 @@ export default function EventsScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const hasFocusedOnce = useRef(false);
 
   const events = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -37,16 +38,62 @@ export default function EventsScreen() {
     setBookmarks(prev => ({ ...prev, [eventId]: !prev[eventId] }));
   };
 
-  const reload = async () => {
-    try {
-      const remote = await apiListEvents();
-      if (Array.isArray(remote)) {
-        setEventsState(remote as any);
-      }
-    } catch (err) {
-      console.warn('Reload failed', err);
-    }
+  const handleDeleteEvent = (eventId: string, eventTitle: string) => {
+    Alert.alert(
+      'Delete Event',
+      `Are you sure you want to delete "${eventTitle}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiDeleteEvent(eventId);
+              Alert.alert('Success', 'Event deleted successfully!');
+              // Remove from local state immediately for better UX
+              setEventsState(prev => prev.filter(e => e.id !== eventId));
+              // Also refresh from server to ensure consistency
+              await loadEvents();
+            } catch (err: any) {
+              console.error('Failed to delete event:', err);
+              Alert.alert('Error', err?.message || 'Failed to delete event');
+            }
+          },
+        },
+      ]
+    );
   };
+
+  const loadEvents = useCallback(
+    async ({ showLoader = false, shouldUpdate }: { showLoader?: boolean; shouldUpdate?: () => boolean } = {}) => {
+      if (showLoader) {
+        setLoading(true);
+        setError(null);
+      }
+
+      try {
+        const remote = await apiListEvents();
+        if ((!shouldUpdate || shouldUpdate()) && Array.isArray(remote)) {
+          setEventsState(remote as any);
+        }
+      } catch (err: any) {
+        if (!shouldUpdate || shouldUpdate()) {
+          if (showLoader) {
+            console.error('Failed to load events from Supabase, falling back to sample data', err);
+            setError(err?.message || String(err));
+          } else {
+            console.warn('Reload failed', err);
+          }
+        }
+      } finally {
+        if (showLoader && (!shouldUpdate || shouldUpdate())) {
+          setLoading(false);
+        }
+      }
+    },
+    []
+  );
 
 
   const handleAddEvent = (ev: any) => {
@@ -77,7 +124,7 @@ export default function EventsScreen() {
 
         if (created) {
           alert('Event added successfully! ID = ' + created.id);
-          await reload(); // ✅ Fetch the latest events from DB
+          await loadEvents(); // Fetch the latest events from DB
         } else {
           console.warn('API did not return the created event object.');
           setEventsState(prev => [ev, ...prev]);
@@ -93,24 +140,23 @@ export default function EventsScreen() {
 
   // Fetch events from Supabase on mount
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const remote = await apiListEvents();
-        if (mounted && Array.isArray(remote)) {
-          setEventsState(remote as any);
-        }
-      } catch (err: any) {
-        console.error('Failed to load events from Supabase, falling back to sample data', err);
-        setError(err?.message || String(err));
-      } finally {
-        if (mounted) setLoading(false);
+    let active = true;
+    loadEvents({ showLoader: true, shouldUpdate: () => active });
+    return () => {
+      active = false;
+    };
+  }, [loadEvents]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
       }
-    })();
-    return () => { mounted = false };
-  }, []);
+
+      void loadEvents();
+    }, [loadEvents])
+  );
 
   return (
     <ScrollView
@@ -140,6 +186,17 @@ export default function EventsScreen() {
           onPress={() => handleEventPress(e.id)}
           onBookmark={() => handleBookmark(e.id)}
           isBookmarked={!!bookmarks[e.id]}
+          onLongPress={() => {
+            Alert.alert(
+              'Event Actions',
+              `What would you like to do with "${e.title}"?`,
+              [
+                { text: 'View Details', onPress: () => handleEventPress(e.id) },
+                { text: 'Delete Event', style: 'destructive', onPress: () => handleDeleteEvent(e.id, e.title) },
+                { text: 'Cancel', style: 'cancel' },
+              ]
+            );
+          }}
         />
       ))}
 

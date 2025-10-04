@@ -1,51 +1,114 @@
+import EditEventModal from '@/components/edit-event-modal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { getEventById } from '@/services/events';
+import { deleteEvent, getEventById, updateEvent } from '@/services/events';
 import { FontAwesome } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  const fetchEvent = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const eventData = await getEventById(String(id));
+      setEvent(eventData);
+    } catch (err: any) {
+      console.error('Failed to fetch event:', err);
+      setError(err?.message || 'Failed to load event');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let mounted = true;
-    
-    const fetchEvent = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const eventData = await getEventById(String(id));
-        if (mounted) {
-          setEvent(eventData);
-        }
-      } catch (err: any) {
-        console.error('Failed to fetch event:', err);
-        if (mounted) {
-          setError(err?.message || 'Failed to load event');
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
     if (id) {
       fetchEvent();
     }
-
-    return () => {
-      mounted = false;
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const handleUpdateEvent = async (updatedData: any) => {
+    try {
+      setUpdating(true);
+      await updateEvent(id, updatedData);
+      Alert.alert('Success', 'Event updated successfully!');
+      setShowEditModal(false);
+      // Refresh event data
+      await fetchEvent();
+    } catch (err: any) {
+      console.error('Failed to update event:', err);
+      Alert.alert('Error', err?.message || 'Failed to update event');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    console.log('Delete button clicked, event ID:', id);
+    
+    if (!id) {
+      Alert.alert('Error', 'Event ID is missing');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Event',
+      'Are you sure you want to delete this event? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('Attempting to delete event with ID:', id);
+              setUpdating(true);
+              
+              await deleteEvent(String(id));
+              console.log('Event deleted from Supabase');
+
+              Alert.alert(
+                'Success',
+                'Event deleted successfully!',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      console.log('Navigating back to events list');
+                      router.dismissTo('/(tabs)/events');
+                    },
+                  },
+                ],
+                { cancelable: false }
+              );
+            } catch (err: any) {
+              console.error('Failed to delete event. Full error:', err);
+              console.error('Error message:', err?.message);
+              console.error('Error stack:', err?.stack);
+
+              const errorMessage = err?.message || err?.toString() || 'Failed to delete event';
+              Alert.alert('Error', `Could not delete event: ${errorMessage}`);
+            } finally {
+              setUpdating(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   if (loading) {
     return (
@@ -140,20 +203,40 @@ export default function EventDetailsScreen() {
 
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => {/* TODO: Add to wishlist */}}>
-            <FontAwesome name="bookmark" size={20} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>Add to Wishlist</Text>
+            style={[styles.button, { backgroundColor: colors.primary, opacity: updating ? 0.6 : 1 }]}
+            onPress={() => {
+              console.log('Edit button pressed');
+              setShowEditModal(true);
+            }}
+            disabled={updating}
+            activeOpacity={0.7}>
+            <FontAwesome name="edit" size={20} color="#fff" style={styles.buttonIcon} />
+            <Text style={styles.buttonText}>{updating ? 'Updating...' : 'Edit Event'}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.secondary }]}
-            onPress={() => {/* TODO: Share event */}}>
-            <FontAwesome name="share" size={20} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>Share Event</Text>
+            style={[styles.button, { backgroundColor: '#e74c3c', opacity: updating ? 0.6 : 1 }]}
+            onPress={() => {
+              console.log('=== DELETE BUTTON PRESSED ===');
+              console.log('Event ID:', id);
+              console.log('Updating state:', updating);
+              handleDeleteEvent();
+            }}
+            disabled={updating}
+            activeOpacity={0.7}
+            testID="delete-button">
+            <FontAwesome name="trash" size={20} color="#fff" style={styles.buttonIcon} />
+            <Text style={styles.buttonText}>{updating ? 'Deleting...' : 'Delete'}</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      <EditEventModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onUpdate={handleUpdateEvent}
+        initialData={event}
+      />
     </ScrollView>
   );
 }
@@ -236,5 +319,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: '#e74c3c',
   },
 });

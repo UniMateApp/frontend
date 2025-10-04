@@ -32,10 +32,31 @@ export async function updateEvent(id: any, patch: any) {
 }
 
 export async function deleteEvent(id: any) {
-  const supabase = await getSupabase();
-  const { error } = await supabase.from('events').delete().eq('id', id);
-  if (error) throw error;
-  return true;
+  console.log('deleteEvent service called with ID:', id, 'Type:', typeof id);
+  
+  try {
+    const supabase = await getSupabase();
+    console.log('Supabase client obtained, attempting delete...');
+    
+    const { data, error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', id)
+      .select(); // Return deleted rows to confirm deletion
+    
+    console.log('Delete query completed. Error:', error, 'Data:', data);
+    
+    if (error) {
+      console.error('Supabase delete error:', error);
+      throw new Error(error.message || 'Database error during deletion');
+    }
+    
+    console.log('Event successfully deleted from database');
+    return { success: true, deletedEvent: data };
+  } catch (err: any) {
+    console.error('deleteEvent service error:', err);
+    throw err;
+  }
 }
 
 export async function getEventById(id: string | number) {
