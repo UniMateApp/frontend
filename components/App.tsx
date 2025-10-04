@@ -1,26 +1,27 @@
-import { useState, useEffect } from 'react'
-import { supabase } from './../services/supabase'
-import Auth from './Auth'
-import Account from './Account'
-import { View } from 'react-native'
-import { Session } from '@supabase/supabase-js'
+// Previously this file created a supabase client at module load and imported
+// @react-native-async-storage/async-storage which can reference `window` on web
+// during SSR. Instead, use the async factory in services/supabase.ts.
+import { supabase as createSupabaseClient } from '@/services/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import React from 'react';
+import { View } from 'react-native';
 
-export default function App() {
-  const [session, setSession] = useState<Session | null>(null)
+// Helper that returns the already-created client synchronously when possible,
+// or falls back to creating it asynchronously. Callers can `await getSupabase()`
+// to ensure the client is ready.
+let _client: SupabaseClient | null = null;
+export async function getSupabase(): Promise<SupabaseClient> {
+  if (_client) return _client;
+  _client = await createSupabaseClient();
+  return _client;
+}
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-    })
+export function useSupabaseSync(): SupabaseClient | null {
+  return _client;
+}
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
-  }, [])
-
-  return (
-    <View>
-      {session && session.user ? <Account key={session.user.id} session={session} /> : <Auth />}
-    </View>
-  )
+// Default App wrapper component used by the router layouts. Keep it minimal
+// so importing this module doesn't trigger storage-related code paths.
+export default function App({ children }: { children: React.ReactNode }) {
+  return <View style={{ flex: 1 }}>{children}</View>;
 }
