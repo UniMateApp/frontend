@@ -9,16 +9,16 @@ import { supabase as getSupabase } from '../services/supabase'
 // `onAuthStateChange` events with the `TOKEN_REFRESHED` or `SIGNED_OUT` event
 // if the user's session is terminated. This should only be registered once.
 AppState.addEventListener('change', async (state) => {
-  try {
-    const supabase = await getSupabase();
-    if (state === 'active') {
-      supabase.auth.startAutoRefresh();
-    } else {
-      supabase.auth.stopAutoRefresh();
-    }
-  } catch {
-    // ignore if client not ready
-  }
+  // try {
+  //   const supabase = await getSupabase();
+  //   if (state === 'active') {
+  //     supabase.auth.startAutoRefresh();
+  //   } else {
+  //     supabase.auth.stopAutoRefresh();
+  //   }
+  // } catch {
+  //   // ignore if client not ready
+  // }
 });
 
 export default function Auth() {
