@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
-import { supabase } from '../services/supabase'
-import { StyleSheet, View, Alert } from 'react-native'
-import { Session } from '@supabase/supabase-js'
-import { Button} from '@/components/ui/Button'
+import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Session } from '@supabase/supabase-js'
+import { useCallback, useEffect, useState } from 'react'
+import { Alert, StyleSheet, View } from 'react-native'
+import { supabase as getSupabase } from '../services/supabase'
 
 export default function Account({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true)
@@ -11,15 +11,12 @@ export default function Account({ session }: { session: Session }) {
   const [website, setWebsite] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
 
-  useEffect(() => {
-    if (session) getProfile()
-  }, [session])
-
-  async function getProfile() {
+  const getProfile = useCallback(async () => {
     try {
       setLoading(true)
       if (!session?.user) throw new Error('No user on the session!')
 
+      const supabase = await getSupabase();
       const { data, error, status } = await supabase
         .from('profiles')
         .select(`username, website, avatar_url`)
@@ -41,7 +38,11 @@ export default function Account({ session }: { session: Session }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session])
+
+  useEffect(() => {
+    if (session) getProfile()
+  }, [session, getProfile])
 
   async function updateProfile({
     username,
@@ -64,7 +65,8 @@ export default function Account({ session }: { session: Session }) {
         updated_at: new Date(),
       }
 
-      const { error } = await supabase.from('profiles').upsert(updates)
+  const supabase = await getSupabase();
+  const { error } = await supabase.from('profiles').upsert(updates)
 
       if (error) {
         throw error
@@ -81,7 +83,7 @@ export default function Account({ session }: { session: Session }) {
   return (
     <View style={styles.container}>
       <View style={[styles.verticallySpaced, styles.mt20]}>
-        <Input label="Email" value={session?.user?.email} disabled />
+        <Input label="Email" value={session?.user?.email} editable={false} />
       </View>
       <View style={styles.verticallySpaced}>
         <Input label="Username" value={username || ''} onChangeText={(text) => setUsername(text)} />
@@ -99,7 +101,7 @@ export default function Account({ session }: { session: Session }) {
       </View>
 
       <View style={styles.verticallySpaced}>
-        <Button title="Sign Out" onPress={() => supabase.auth.signOut()} />
+  <Button title="Sign Out" onPress={async () => (await getSupabase()).auth.signOut()} />
       </View>
     </View>
   )
