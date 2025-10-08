@@ -1,7 +1,8 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { signOut } from '@/services/auth';
 import { FontAwesome } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface SettingItemProps {
   icon: React.ComponentProps<typeof FontAwesome>['name'];
@@ -73,7 +74,33 @@ export default function ProfileScreen() {
         <SettingItem
           icon="sign-out"
           title="Sign Out"
-          onPress={() => {/* TODO */}}
+          onPress={async () => {
+            const isWeb = typeof window !== 'undefined' && (window as any).document != null
+            if (isWeb) {
+              const ok = window.confirm('Are you sure you want to sign out?')
+              if (!ok) return
+              try {
+                await signOut()
+              } catch (e) {
+                window.alert('Sign out failed. Please try again.')
+              }
+            } else {
+              Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Sign Out',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await signOut()
+                    } catch (e) {
+                      Alert.alert('Error', 'Sign out failed. Please try again.')
+                    }
+                  },
+                },
+              ])
+            }
+          }}
         />
       </View>
     </ScrollView>
