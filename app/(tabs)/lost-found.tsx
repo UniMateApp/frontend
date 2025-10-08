@@ -1,5 +1,6 @@
 import { SearchBar } from '@/components/search-bar';
 import { supabase } from '@/services/supabase';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import LostFoundItemCard from '../../components/lost-found-item-card';
@@ -34,6 +35,7 @@ export default function LostFoundScreen() {
   const [loading, setLoading] = useState(false);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const router = useRouter();
 
   const open = () => setModalVisible(true);
   const close = () => setModalVisible(false);
@@ -84,11 +86,11 @@ export default function LostFoundScreen() {
   const handleAdd = async (post: any) => {
     try {
       const created = await createLostFound({
-        kind: post.type.toLowerCase(),
-        title: post.title,
+        type: post.type.toLowerCase(), // Use 'type' instead of 'kind'
+        item_name: post.title, // Use 'item_name' to match the interface
         description: post.description,
-        contact: post.contact,
-        resolved: false,
+        contact_info: post.contact, // Use 'contact_info' to match the interface
+        is_resolved: false, // Use 'is_resolved' to match the interface
       });
       setPosts(prev => [created, ...prev]);
       Alert.alert('Success', 'Post added successfully!');
@@ -142,6 +144,11 @@ export default function LostFoundScreen() {
     }
   };
 
+  /** Navigate to item details */
+  const handleItemPress = (id: string) => {
+    router.push({ pathname: '/lost-found/[id]', params: { id } });
+  };
+
   const data = useMemo(() => posts, [posts]);
 
   return (
@@ -167,6 +174,7 @@ export default function LostFoundScreen() {
             onResolve={handleResolve} 
             onDelete={handleDelete}
             onWishlistToggle={handleWishlistToggle}
+            onPress={() => handleItemPress(String(item.id))}
           />
         )}
         contentContainerStyle={{ paddingBottom: 60 }}

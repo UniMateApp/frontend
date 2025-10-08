@@ -5,14 +5,14 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
 import {
-    Event,
-    addEventToWishlist,
-    getEventsWithWishlistStatus,
-    removeItemFromWishlist,
+  Event,
+  addEventToWishlist,
+  getEventsWithWishlistStatus,
+  removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EventsScreen() {
   const colorScheme = useColorScheme();
@@ -64,6 +64,58 @@ export default function EventsScreen() {
       } else {
         Alert.alert('Error', error.message || 'Failed to update wishlist');
       }
+    }
+  };
+
+  const handleShare = async (event: Event & { isInWishlist: boolean }) => {
+    try {
+      const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'TBD';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      };
+
+      const formatTime = (dateStr: string) => {
+        if (!dateStr) return 'TBD';
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      };
+
+      const shareContent = {
+        title: event.title || 'Check out this event!',
+        message: `🎉 ${event.title || 'Event'} by ${event.organizer || 'Unknown'}\n\n${event.description || 'Join us for an exciting event!'}\n\n📅 Date: ${formatDate(event.start_at || '')}\n⏰ Time: ${formatTime(event.start_at || '')}\n📍 Location: ${event.location || 'TBD'}\n\n#UniMateEvent`,
+        url: Platform.OS === 'web' ? window.location.href : undefined,
+      };
+
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share(shareContent);
+        } else {
+          // Fallback for web browsers without native share
+          await navigator.clipboard.writeText(shareContent.message);
+          window.alert('Event details copied to clipboard!');
+        }
+      } else {
+        await Share.share(shareContent);
+      }
+    } catch (error: any) {
+      console.error('Error sharing:', error);
+      if (error.name !== 'AbortError') { // User cancelled sharing
+        const message = 'Failed to share event';
+        if (Platform.OS === 'web') {
+          window.alert(`Error: ${message}`);
+        } else {
+          Alert.alert('Error', message);
+        }
+      }
+    }
+  };
+
+  const handleRSVP = (event: Event & { isInWishlist: boolean }) => {
+    if (Platform.OS === 'web') {
+      window.alert(`RSVP for "${event.title}" - Feature coming soon!`);
+    } else {
+      Alert.alert('RSVP', `RSVP for "${event.title}" - Feature coming soon!`);
     }
   };
 
@@ -222,12 +274,15 @@ export default function EventsScreen() {
           onPress={() => handleEventPress(e.id)}
           onBookmark={() => handleWishlistToggle(e.id, e.isInWishlist)}
           isBookmarked={e.isInWishlist}
+          onShare={() => handleShare(e)}
+          onRsvp={() => handleRSVP(e)}
           onLongPress={() => {
             Alert.alert(
               'Event Actions',
               `What would you like to do with "${e.title}"?`,
               [
                 { text: 'View Details', onPress: () => handleEventPress(e.id) },
+                { text: 'Share Event', onPress: () => handleShare(e) },
                 { text: 'Delete Event', style: 'destructive', onPress: () => handleDeleteEvent(e.id, e.title) },
                 { text: 'Cancel', style: 'cancel' },
               ]

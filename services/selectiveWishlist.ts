@@ -89,6 +89,7 @@ export async function getUserWishlistItems(): Promise<WishlistItem[]> {
 // Add an event to the user's wishlist
 export async function addEventToWishlist(eventId: string): Promise<string> {
   try {
+    console.log('[Wishlist] Adding event to wishlist:', eventId);
     const client = await getSupabase();
     const { data: { user } } = await client.auth.getUser();
     
@@ -96,6 +97,8 @@ export async function addEventToWishlist(eventId: string): Promise<string> {
       throw new Error('User not authenticated');
     }
 
+    console.log('[Wishlist] User authenticated:', user.id);
+    
     // Use the database function to add event to wishlist
     const { data, error } = await client
       .rpc('add_event_to_wishlist', { event_id: eventId });
@@ -104,10 +107,11 @@ export async function addEventToWishlist(eventId: string): Promise<string> {
       if (error.code === '23505') { // Unique constraint violation
         throw new Error('Event is already in your wishlist');
       }
-      console.error('Error adding event to wishlist:', error);
+      console.error('[Wishlist] Error adding event to wishlist:', error);
       throw error;
     }
 
+    console.log('[Wishlist] Successfully added event to wishlist, returned ID:', data);
     return data; // Returns the wishlist item ID
   } catch (error) {
     console.error('addEventToWishlist error:', error);
@@ -173,12 +177,15 @@ export async function removeFromWishlist(wishlistItemId: string): Promise<void> 
 // Remove item by type and item_id (alternative method)
 export async function removeItemFromWishlist(itemType: 'event' | 'lost_found', itemId: string): Promise<void> {
   try {
+    console.log('[Wishlist] Removing item from wishlist:', { itemType, itemId });
     const client = await getSupabase();
     const { data: { user } } = await client.auth.getUser();
     
     if (!user) {
       throw new Error('User not authenticated');
     }
+
+    console.log('[Wishlist] User authenticated for removal:', user.id);
 
     const { error } = await client
       .from('wishlist')
@@ -188,9 +195,11 @@ export async function removeItemFromWishlist(itemType: 'event' | 'lost_found', i
       .eq('item_id', itemId);
 
     if (error) {
-      console.error('Error removing item from wishlist:', error);
+      console.error('[Wishlist] Error removing item from wishlist:', error);
       throw error;
     }
+    
+    console.log('[Wishlist] Successfully removed item from wishlist');
   } catch (error) {
     console.error('removeItemFromWishlist error:', error);
     throw error;
@@ -290,11 +299,16 @@ export async function getEventsWithWishlistStatus(): Promise<(Event & { isInWish
     }
 
     const wishlistEventIds = new Set((wishlistItems || []).map(item => item.item_id));
+    console.log('[Wishlist] Found wishlist event IDs:', Array.from(wishlistEventIds));
 
-    return (events || []).map(event => ({
+    const result = (events || []).map(event => ({
       ...event,
-      isInWishlist: wishlistEventIds.has(event.id)
+      isInWishlist: wishlistEventIds.has(String(event.id))
     }));
+    
+    console.log('[Wishlist] Events with wishlist status:', result.map(e => ({ id: e.id, title: e.title, isInWishlist: e.isInWishlist })));
+    
+    return result;
   } catch (error) {
     console.error('getEventsWithWishlistStatus error:', error);
     throw error;

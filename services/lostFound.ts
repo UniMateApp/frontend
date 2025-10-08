@@ -12,6 +12,37 @@ export async function listLostFound() {
   return data;
 }
 
+/** Get a specific lost & found item by ID */
+export async function getLostFoundItemById(id: string) {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from('lost_found')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  
+  // Map database fields to interface fields for consistency
+  if (data) {
+    return {
+      id: data.id,
+      item_name: data.title,
+      description: data.description,
+      type: data.kind,
+      location: data.location,
+      contact_info: data.contact,
+      image_url: data.image_url,
+      created_by: data.created_by,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      is_resolved: data.resolved,
+    };
+  }
+  
+  return data;
+}
+
 /** Create a new lost/found post */
 export async function createLostFound(payload: any) {
   if (!payload.created_by) {
@@ -51,6 +82,33 @@ export async function resolveLostFound(id: number) {
 
 /** Delete a post */
 export async function deleteLostFound(id: number) {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from('lost_found')
+    .delete()
+    .eq('id', id)
+    .select();
+
+  if (error) throw error;
+  return { success: true, deleted: data };
+}
+
+/** Mark a lost & found item as resolved (alias for detail view) */
+export async function resolveLostFoundItem(id: string) {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from('lost_found')
+    .update({ resolved: true })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/** Delete a lost & found item (alias for detail view) */
+export async function deleteLostFoundItem(id: string) {
   const supabase = await getSupabase();
   const { data, error } = await supabase
     .from('lost_found')
