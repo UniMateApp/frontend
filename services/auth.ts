@@ -1,8 +1,14 @@
 import { supabase as getSupabase } from './supabase';
 
-export async function signUpWithEmail(email: string, password: string) {
+export async function signUpWithEmail(email: string, password: string, userData?: { full_name?: string }) {
   const client = await getSupabase();
-  return await client.auth.signUp({ email, password });
+  return await client.auth.signUp({ 
+    email, 
+    password,
+    options: {
+      data: userData || {}
+    }
+  });
 }
 
 export async function signInWithEmail(email: string, password: string) {
@@ -22,6 +28,35 @@ export async function getCurrentUser() {
     return res?.data?.user ?? null;
   } catch {
     return null;
+  }
+}
+
+// Ensure user profile exists in profiles table
+export async function ensureUserProfile(user: any) {
+  try {
+    const client = await getSupabase();
+    console.log('Ensuring profile for user:', user?.id, 'with metadata:', user?.user_metadata);
+    
+    // Use upsert to create or update profile with user metadata
+    const { data, error: upsertError } = await client
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        full_name: user.user_metadata?.full_name || null,
+        avatar_url: user.user_metadata?.avatar_url || null,
+      })
+      .select();
+    
+    if (upsertError) {
+      console.error('[ensureUserProfile] Profile upsert failed:', upsertError);
+      console.log('[ensureUserProfile] This is expected if RLS policies are not set up yet - signup will continue');
+      // Don't throw - let signup continue even if profile creation fails
+    } else {
+      console.log('[ensureUserProfile] Profile upserted successfully for user:', user.id, 'data:', data);
+    }
+  } catch (error) {
+    console.error('[ensureUserProfile] Unexpected error:', error);
+    // Don't re-throw the error to avoid breaking signup flow
   }
 }
 

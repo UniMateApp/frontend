@@ -1,80 +1,32 @@
+import { SearchBar } from '@/components/search-bar';
+import { supabase } from '@/services/supabase';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import LostFoundItemCard from '../../components/lost-found-item-card';
 import LostFoundModal from '../../components/lost-found-modal';
-import { SearchBar } from '../../components/search-bar';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
-import { listLostFound, createLostFound, resolveLostFound, deleteLostFound } from '../../services/lostFound';
+import { createLostFound, deleteLostFound, resolveLostFound } from '../../services/lostFound';
+import {
+  addLostFoundToWishlist,
+  getLostFoundWithWishlistStatus,
+  removeItemFromWishlist
+} from '../../services/selectiveWishlist';
 
 type Post = {
-  id: number;
-  kind: 'lost' | 'found';
-  title: string;
+  id: string;
+  item_name: string;
   description?: string;
-  contact?: string;
+  type: 'lost' | 'found';
+  location?: string;
+  contact_info?: string;
+  image_url?: string;
+  created_by?: string;
   created_at: string;
-  resolved?: boolean;
+  updated_at: string;
+  is_resolved?: boolean;
+  isInWishlist?: boolean;
 };
-
-function PostCard({ item, onResolve, onDelete }: { item: Post; onResolve: (id: number) => void; onDelete: (id: number) => void }) {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-
-  return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-      <View style={styles.cardHeader}>
-        <Text style={[styles.cardTitle, { color: colors.text }]}>{item.title}</Text>
-        <Text
-          style={[
-            styles.typePill,
-            {
-              backgroundColor: item.kind === 'lost' ? '#d9534f' : '#5cb85c',
-              color: '#fff',
-            },
-          ]}>
-          {item.kind === 'lost' ? 'Lost' : 'Found'}
-        </Text>
-      </View>
-
-      {item.description ? (
-        <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>{item.description}</Text>
-      ) : null}
-
-      <View style={styles.cardFooter}>
-        <Text style={{ color: colors.textSecondary }}>
-          {new Date(item.created_at).toLocaleString()}
-        </Text>
-        <View style={{ flexDirection: 'row' }}>
-          {item.contact ? (
-            <Text style={{ marginRight: 12, color: colors.textSecondary }}>
-              {item.contact}
-            </Text>
-          ) : null}
-
-          {!item.resolved ? (
-            <TouchableOpacity
-              onPress={() => onResolve(item.id)}
-              style={[styles.resolveButton, { backgroundColor: colors.primary }]}>
-              <Text style={{ color: '#fff' }}>Mark resolved</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={{ color: colors.textSecondary }}>Resolved</Text>
-          )}
-
-          <TouchableOpacity
-            onPress={() =>
-              Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => onDelete(item.id) },
-              ])
-            }>
-            <Text style={{ color: 'red', marginLeft: 12 }}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-}
 
 export default function LostFoundScreen() {
   const [modalVisible, setModalVisible] = useState(false);
@@ -86,12 +38,12 @@ export default function LostFoundScreen() {
   const open = () => setModalVisible(true);
   const close = () => setModalVisible(false);
 
-  /** Fetch posts */
+  /** Fetch posts with wishlist status */
   const loadPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listLostFound();
-      setPosts(data as any);
+      const data = await getLostFoundWithWishlistStatus();
+      setPosts(data);
     } catch (err: any) {
       console.error('Failed to load posts', err);
       Alert.alert('Error', err.message || 'Failed to load posts');
@@ -102,6 +54,30 @@ export default function LostFoundScreen() {
 
   useEffect(() => {
     loadPosts();
+    
+    // Subscribe to wishlist changes for real-time updates
+    const setupSubscription = async () => {
+      const client = await supabase();
+      const subscription = client
+        .channel('lost_found_wishlist_changes')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'selective_wishlist' },
+          () => {
+            loadPosts();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    };
+
+    const cleanup = setupSubscription();
+    
+    return () => {
+      cleanup.then(fn => fn?.());
+    };
   }, [loadPosts]);
 
   /** Add post */
@@ -125,23 +101,44 @@ export default function LostFoundScreen() {
   };
 
   /** Resolve post */
-  const handleResolve = async (id: number) => {
+  const handleResolve = async (id: string) => {
     try {
-      await resolveLostFound(id);
-      setPosts(prev => prev.map(p => (p.id === id ? { ...p, resolved: true } : p)));
+      await resolveLostFound(parseInt(id));
+      setPosts(prev => prev.map(p => (p.id === id ? { ...p, is_resolved: true } : p)));
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Could not mark as resolved');
     }
   };
 
   /** Delete post */
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
-      await deleteLostFound(id);
+      await deleteLostFound(parseInt(id));
       setPosts(prev => prev.filter(p => p.id !== id));
       Alert.alert('Deleted', 'Post deleted successfully!');
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Could not delete post');
+    }
+  };
+
+  /** Toggle wishlist for lost-found item */
+  const handleWishlistToggle = async (id: string, isInWishlist: boolean) => {
+    try {
+      if (isInWishlist) {
+        await removeItemFromWishlist('lost_found', id);
+        setPosts(prev => prev.map(p => (p.id.toString() === id ? { ...p, isInWishlist: false } : p)));
+      } else {
+        await addLostFoundToWishlist(id);
+        setPosts(prev => prev.map(p => (p.id.toString() === id ? { ...p, isInWishlist: true } : p)));
+      }
+    } catch (error: any) {
+      // Cross-platform error handling
+      const message = error.message || 'Failed to update wishlist';
+      if (typeof window !== 'undefined') {
+        window.alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
     }
   };
 
@@ -164,7 +161,13 @@ export default function LostFoundScreen() {
         data={data}
         keyExtractor={i => String(i.id)}
         renderItem={({ item }) => (
-          <PostCard item={item} onResolve={handleResolve} onDelete={handleDelete} />
+          <LostFoundItemCard 
+            item={item} 
+            isInWishlist={item.isInWishlist || false}
+            onResolve={handleResolve} 
+            onDelete={handleDelete}
+            onWishlistToggle={handleWishlistToggle}
+          />
         )}
         contentContainerStyle={{ paddingBottom: 60 }}
         ListEmptyComponent={() => (

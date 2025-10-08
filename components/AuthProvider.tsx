@@ -1,7 +1,6 @@
 import React, { ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { getCurrentUser, onAuthStateChange } from '../services/auth';
-import { upsertProfile } from '../services/profiles';
+import { ensureUserProfile, getCurrentUser, onAuthStateChange } from '../services/auth';
 import Auth from './Auth';
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
@@ -23,9 +22,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         // on sign in, ensure profile exists
         if (current) {
           try {
-            await upsertProfile({ id: current.id, full_name: current.user_metadata?.full_name ?? null, avatar_url: current.user_metadata?.avatar_url ?? null });
-          } catch (e) {
-            // ignore profile failures
+            await ensureUserProfile(current);
+          } catch (e: any) {
+            // ignore profile failures but log silently
+            console.log('AuthProvider: Profile creation skipped due to RLS (this is expected during signup)');
           }
         }
       });
