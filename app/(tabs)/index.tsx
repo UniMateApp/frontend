@@ -1,39 +1,64 @@
 import { EventCard } from '@/components/event-card';
+import LostFoundItemCard from '@/components/lost-found-item-card';
 import { SearchBar } from '@/components/search-bar';
-import { sampleEvents } from '@/constants/sample-events';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { listEvents as apiListEvents } from '@/services/events';
+import {
+  Event,
+  MappedLostFoundItem,
+  addEventToWishlist,
+  addLostFoundToWishlist,
+  getEventsWithWishlistStatus,
+  getLostFoundWithWishlistStatus,
+  removeItemFromWishlist,
+} from '@/services/selectiveWishlist';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+// Unified item type for both events and lost-found items
+type UnifiedItem = 
+  | (Event & { isInWishlist: boolean; itemType: 'event' })
+  | (MappedLostFoundItem & { isInWishlist: boolean; itemType: 'lost_found' });
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
   const [query, setQuery] = useState('');
-  const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({});
-  const [activeCategory, setActiveCategory] = useState<string>('All');
-  const [eventsState, setEventsState] = useState(sampleEvents);
+  const [activeFilter, setActiveFilter] = useState<string>('All');
+  const [allItems, setAllItems] = useState<UnifiedItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const categories = ['All', 'Technology', 'Cultural', 'Career', 'Sports'];
+  const filterOptions = ['All', 'Events', 'Lost & Found'];
   const hasFocusedOnce = useRef(false);
 
-  /** Filter events by search + category */
-  const events = useMemo(() => {
+  /** Filter items by search + type */
+  const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = eventsState;
-    if (activeCategory !== 'All') {
-      list = list.filter(e => (e.category || '').toLowerCase() === activeCategory.toLowerCase());
+    let list = allItems;
+    
+    // Filter by item type (Events, Lost & Found, or All)
+    if (activeFilter === 'Events') {
+      list = list.filter(item => item.itemType === 'event');
+    } else if (activeFilter === 'Lost & Found') {
+      list = list.filter(item => item.itemType === 'lost_found');
     }
+    
+    // Filter by search query
     if (!q) return list;
-    return list.filter(e =>
-      (e.title + ' ' + e.organizer + ' ' + e.location).toLowerCase().includes(q)
-    );
-  }, [query, activeCategory, eventsState]);
+    return list.filter(item => {
+      if (item.itemType === 'event') {
+        const event = item as Event & { isInWishlist: boolean; itemType: 'event' };
+        return (event.title + ' ' + (event.organizer || '') + ' ' + (event.location || '')).toLowerCase().includes(q);
+      } else {
+        const lostFound = item as MappedLostFoundItem & { isInWishlist: boolean; itemType: 'lost_found' };
+        return (lostFound.item_name + ' ' + (lostFound.description || '') + ' ' + (lostFound.location || '')).toLowerCase().includes(q);
+      }
+    });
+  }, [query, activeFilter, allItems]);
 
   const handleSearch = (text: string) => setQuery(text);
 
@@ -41,12 +66,44 @@ export default function HomeScreen() {
     router.push({ pathname: '/event/[id]', params: { id: eventId } });
   };
 
-  const handleBookmark = (eventId: string) => {
-    setBookmarks(prev => ({ ...prev, [eventId]: !prev[eventId] }));
+  /** Navigate to lost-found item details */
+  const handleLostFoundPress = (itemId: string) => {
+    router.push({ pathname: '/lost-found/[id]', params: { id: itemId } });
   };
 
-  /** Fetch events from Supabase */
-  const loadEvents = useCallback(
+  const handleWishlistToggle = async (itemId: string, itemType: 'event' | 'lost_found', isCurrentlyInWishlist: boolean) => {
+    try {
+      if (isCurrentlyInWishlist) {
+        await removeItemFromWishlist(itemType, itemId);
+      } else {
+        if (itemType === 'event') {
+          await addEventToWishlist(itemId);
+        } else {
+          await addLostFoundToWishlist(itemId);
+        }
+      }
+      
+      // Update local state immediately
+      setAllItems(prev => 
+        prev.map(item => 
+          item.id === itemId && item.itemType === itemType
+            ? { ...item, isInWishlist: !isCurrentlyInWishlist }
+            : item
+        )
+      );
+    } catch (error: any) {
+      console.error('Error toggling wishlist:', error);
+      const isWeb = typeof window !== 'undefined' && (window as any).document != null;
+      if (isWeb) {
+        window.alert(error.message || 'Failed to update wishlist');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to update wishlist');
+      }
+    }
+  };
+
+  /** Fetch both events and lost-found items with wishlist status */
+  const loadAllItems = useCallback(
     async ({ showLoader = false, shouldUpdate }: { showLoader?: boolean; shouldUpdate?: () => boolean } = {}) => {
       if (showLoader) {
         setLoading(true);
@@ -54,15 +111,44 @@ export default function HomeScreen() {
       }
 
       try {
-        const remote = await apiListEvents();
-        if ((!shouldUpdate || shouldUpdate()) && Array.isArray(remote)) {
-          setEventsState(remote as any);
+        // Fetch both events and lost-found items in parallel
+        const [eventsWithWishlist, lostFoundWithWishlist] = await Promise.all([
+          getEventsWithWishlistStatus(),
+          getLostFoundWithWishlistStatus()
+        ]);
+
+        if (!shouldUpdate || shouldUpdate()) {
+          // Combine both arrays with itemType identifier
+          const combinedItems: UnifiedItem[] = [
+            ...eventsWithWishlist.map(event => ({ ...event, itemType: 'event' as const })),
+            ...lostFoundWithWishlist.map(lostFound => ({ ...lostFound, itemType: 'lost_found' as const }))
+          ];
+          
+          setAllItems(combinedItems);
         }
       } catch (err: any) {
-        console.error('Failed to load events:', err);
         if (!shouldUpdate || shouldUpdate()) {
-          setError(err?.message || 'Failed to load events');
-          setEventsState(sampleEvents); // fallback
+          if (showLoader) {
+            console.error('Failed to load items with wishlist status', err);
+            setError(err?.message || String(err));
+            // Fallback to basic events only
+            try {
+              const basicEvents = await apiListEvents();
+              if (Array.isArray(basicEvents)) {
+                const eventsWithDefault = basicEvents.map(event => ({ 
+                  ...event, 
+                  isInWishlist: false, 
+                  itemType: 'event' as const 
+                }));
+                setAllItems(eventsWithDefault);
+              }
+            } catch (fallbackErr) {
+              console.error('Fallback also failed', fallbackErr);
+              setAllItems([]);
+            }
+          } else {
+            console.warn('Reload failed', err);
+          }
         }
       } finally {
         if (showLoader && (!shouldUpdate || shouldUpdate())) {
@@ -76,11 +162,11 @@ export default function HomeScreen() {
   /** Initial fetch */
   useEffect(() => {
     let active = true;
-    loadEvents({ showLoader: true, shouldUpdate: () => active });
+    loadAllItems({ showLoader: true, shouldUpdate: () => active });
     return () => {
       active = false;
     };
-  }, [loadEvents]);
+  }, [loadAllItems]);
 
   /** Refresh on refocus */
   useFocusEffect(
@@ -89,8 +175,8 @@ export default function HomeScreen() {
         hasFocusedOnce.current = true;
         return;
       }
-      void loadEvents();
-    }, [loadEvents])
+      void loadAllItems();
+    }, [loadAllItems])
   );
 
   return (
@@ -101,29 +187,31 @@ export default function HomeScreen() {
         <SearchBar onSearch={handleSearch} />
 
         <View style={styles.chipsRow}>
-          {categories.map(cat => (
+          {filterOptions.map(filter => (
             <TouchableOpacity
-              key={cat}
+              key={filter}
               style={[
                 styles.chip,
-                activeCategory === cat
+                activeFilter === filter
                   ? { borderColor: colors.primary, backgroundColor: colors.card }
                   : { borderColor: colors.cardBorder },
               ]}
-              onPress={() => setActiveCategory(cat)}>
+              onPress={() => setActiveFilter(filter)}>
               <Text
                 style={[
                   styles.chipText,
-                  { color: activeCategory === cat ? colors.primary : colors.text },
+                  { color: activeFilter === filter ? colors.primary : colors.text },
                 ]}>
-                {cat}
+                {filter}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>Upcoming Events</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        {activeFilter === 'All' ? 'Recent Activity' : activeFilter}
+      </Text>
 
       {loading && <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 20 }} />}
 
@@ -133,20 +221,56 @@ export default function HomeScreen() {
         </Text>
       )}
 
-      {events.map(e => (
-        <EventCard
-          key={e.id}
-          title={e.title}
-          category={e.category}
-          organizer={e.organizer}
-          date={e.date}
-          location={e.location}
-          imageUrl={require('../../assets/images/icon.png')}  // 👈 fallback local image
-          onPress={() => handleEventPress(e.id)}
-          onBookmark={() => handleBookmark(e.id)}
-          isBookmarked={!!bookmarks[e.id]}
-        />
-      ))}
+      {filteredItems.map((item) => {
+        if (item.itemType === 'event') {
+          const event = item as Event & { isInWishlist: boolean; itemType: 'event' };
+          return (
+            <EventCard
+              key={`event-${event.id}`}
+              title={event.title}
+              category={event.category}
+              organizer={event.organizer || 'Unknown Organizer'}
+              date={event.start_at ? new Date(event.start_at).toLocaleDateString() : 'Date TBD'}
+              location={event.location || 'Location TBD'}
+              imageUrl={event.image_url || require('../../assets/images/icon.png')}
+              onPress={() => handleEventPress(event.id)}
+              onBookmark={() => handleWishlistToggle(event.id, 'event', event.isInWishlist)}
+              isBookmarked={event.isInWishlist}
+            />
+          );
+        } else {
+          const lostFound = item as MappedLostFoundItem & { isInWishlist: boolean; itemType: 'lost_found' };
+          return (
+            <LostFoundItemCard
+              key={`lostfound-${lostFound.id}`}
+              item={{
+                id: lostFound.id,
+                item_name: lostFound.item_name,
+                description: lostFound.description,
+                type: lostFound.type,
+                location: lostFound.location,
+                contact_info: lostFound.contact_info,
+                image_url: lostFound.image_url,
+                created_by: lostFound.created_by,
+                created_at: lostFound.created_at,
+                updated_at: lostFound.updated_at,
+                is_resolved: lostFound.is_resolved,
+              }}
+              isInWishlist={lostFound.isInWishlist}
+              onPress={() => handleLostFoundPress(lostFound.id)}
+              onWishlistToggle={() => handleWishlistToggle(lostFound.id, 'lost_found', lostFound.isInWishlist)}
+              onResolve={(id) => {
+                // Navigate to lost-found screen for full functionality
+                router.push('/(tabs)/lost-found');
+              }}
+              onDelete={(id) => {
+                // Navigate to lost-found screen for full functionality
+                router.push('/(tabs)/lost-found');
+              }}
+            />
+          );
+        }
+      })}
     </ScrollView>
   );
 }

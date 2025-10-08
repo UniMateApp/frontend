@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Colors } from '@/constants/theme'
 import { useColorScheme } from '@/hooks/use-color-scheme'
-import { signInWithEmail as supabaseSignIn, signUpWithEmail as supabaseSignUp } from '@/services/auth'
+import { ensureUserProfile, signInWithEmail as supabaseSignIn, signUpWithEmail as supabaseSignUp } from '@/services/auth'
 import React, { useEffect, useState } from 'react'
 import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
@@ -31,8 +31,14 @@ export default function Auth() {
     setLoading(true)
     setErrorMessage(null)
     try {
-      const { error } = await supabaseSignIn(email, password)
-      if (error) setErrorMessage(error.message)
+      const { data, error } = await supabaseSignIn(email, password)
+      console.log('Sign in response:', { data, error })
+      if (error) {
+        setErrorMessage(error.message)
+      } else if (data?.user) {
+        // Ensure profile exists after successful sign in
+        await ensureUserProfile(data.user)
+      }
     } catch (e: any) {
       setErrorMessage(e?.message ?? 'Sign in failed')
     } finally {
@@ -41,14 +47,42 @@ export default function Auth() {
   }
 
   async function signUpWithEmail() {
-    console.log('Signing up with email:', email)
+    console.log('Signing up with email:', email, 'name:', name)
     setLoading(true)
     setErrorMessage(null)
     try {
-      const res: any = await supabaseSignUp(email, password)
-      const { data: { session } = {}, error } = res || {}
+      const res: any = await supabaseSignUp(email, password, { full_name: name })
       console.log('Sign up response:', res)
-      if (error) setErrorMessage(error.message)
+      
+      const { data: { session, user } = {}, error } = res || {}
+      console.log('Extracted data:', { session: !!session, user: !!user, error })
+      
+      if (error) {
+        console.error('Signup error:', error)
+        setErrorMessage(error.message)
+      }
+      
+      // If user was created, try to ensure profile has correct name (don't let this block the flow)
+      if (user && name) {
+        console.log('Attempting to ensure profile for user...')
+        try {
+          await ensureUserProfile(user)
+          console.log('Profile creation attempt completed successfully')
+        } catch (profileError: any) {
+          console.error('Profile creation failed (non-blocking - signup will continue):', profileError)
+          console.error('Profile error details:', {
+            code: profileError?.code,
+            message: profileError?.message,
+            details: profileError?.details
+          })
+          // Don't set error message for profile issues during signup
+        }
+      } else if (user && !name) {
+        console.log('User created but no name provided, skipping profile creation')
+      } else {
+        console.log('No user returned from signup, skipping profile creation')
+      }
+      
       if (!session) {
         // Show platform-appropriate confirmation and an option to open the mail app
         // Web: use window.confirm + window.open

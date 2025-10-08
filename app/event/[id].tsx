@@ -2,11 +2,11 @@ import EditEventModal from '@/components/edit-event-modal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { deleteEvent, getEventById, updateEvent } from '@/services/events';
+import { addEventToWishlist, isEventInWishlist, removeItemFromWishlist } from '@/services/selectiveWishlist';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Platform } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -19,6 +19,8 @@ export default function EventDetailsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [isInWishlist, setIsInWishlist] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   const fetchEvent = async () => {
     try {
@@ -26,6 +28,15 @@ export default function EventDetailsScreen() {
       setError(null);
       const eventData = await getEventById(String(id));
       setEvent(eventData);
+      
+      // Check if event is in wishlist
+      try {
+        const wishlistStatus = await isEventInWishlist(String(id));
+        setIsInWishlist(wishlistStatus);
+      } catch (wishlistErr) {
+        console.warn('Could not check wishlist status:', wishlistErr);
+        setIsInWishlist(false);
+      }
     } catch (err: any) {
       console.error('Failed to fetch event:', err);
       setError(err?.message || 'Failed to load event');
@@ -54,6 +65,87 @@ export default function EventDetailsScreen() {
       Alert.alert('Error', err?.message || 'Failed to update event');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleWishlistToggle = async () => {
+    if (!id) return;
+    
+    try {
+      setWishlistLoading(true);
+      
+      if (isInWishlist) {
+        await removeItemFromWishlist('event', String(id));
+        setIsInWishlist(false);
+        
+        if (Platform.OS === 'web') {
+          window.alert('Removed from wishlist!');
+        } else {
+          Alert.alert('Success', 'Removed from wishlist!');
+        }
+      } else {
+        await addEventToWishlist(String(id));
+        setIsInWishlist(true);
+        
+        if (Platform.OS === 'web') {
+          window.alert('Added to wishlist!');
+        } else {
+          Alert.alert('Success', 'Added to wishlist!');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error toggling wishlist:', error);
+      const message = error.message || 'Failed to update wishlist';
+      
+      if (Platform.OS === 'web') {
+        window.alert(`Error: ${message}`);
+      } else {
+        Alert.alert('Error', message);
+      }
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!event) return;
+    
+    try {
+      const shareContent = {
+        title: event.title || 'Check out this event!',
+        message: `${event.title || 'Event'} by ${event.organizer || 'Unknown'}\n\n${event.description || 'No description available.'}\n\nDate: ${formatDate(event.start_at)}\nTime: ${formatTime(event.start_at)}\nLocation: ${event.location || 'TBD'}`,
+        url: Platform.OS === 'web' ? window.location.href : undefined,
+      };
+
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share(shareContent);
+        } else {
+          // Fallback for web browsers without native share
+          await navigator.clipboard.writeText(shareContent.message);
+          window.alert('Event details copied to clipboard!');
+        }
+      } else {
+        await Share.share(shareContent);
+      }
+    } catch (error: any) {
+      console.error('Error sharing:', error);
+      if (error.name !== 'AbortError') { // User cancelled sharing
+        const message = 'Failed to share event';
+        if (Platform.OS === 'web') {
+          window.alert(`Error: ${message}`);
+        } else {
+          Alert.alert('Error', message);
+        }
+      }
+    }
+  };
+
+  const handleRSVP = () => {
+    if (Platform.OS === 'web') {
+      window.alert('RSVP functionality coming soon!');
+    } else {
+      Alert.alert('RSVP', 'RSVP functionality coming soon!');
     }
   };
 
@@ -180,10 +272,29 @@ export default function EventDetailsScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Image
-        source={event.image_url ? { uri: event.image_url } : require('../../assets/images/icon.png')}
-        style={styles.image}
-      />      
+      <View style={styles.imageContainer}>
+        <Image
+          source={event.image_url ? { uri: event.image_url } : require('../../assets/images/icon.png')}
+          style={styles.image}
+        />
+        {/* Wishlist Heart Icon */}
+        <TouchableOpacity 
+          onPress={handleWishlistToggle}
+          style={[styles.wishlistButton, { backgroundColor: colors.card, opacity: wishlistLoading ? 0.6 : 1 }]}
+          disabled={wishlistLoading}
+        >
+          {wishlistLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <FontAwesome 
+              name={isInWishlist ? 'heart' : 'heart-o'} 
+              size={24} 
+              color={isInWishlist ? colors.primary : colors.icon} 
+            />
+          )}
+        </TouchableOpacity>
+      </View>
+      
       <View style={styles.content}>
         <Text style={[styles.title, { color: colors.text }]}>{event.title || 'Untitled Event'}</Text>
         <Text style={[styles.organizer, { color: colors.textSecondary }]}>
@@ -236,6 +347,28 @@ export default function EventDetailsScreen() {
           </Text>
         </View>
 
+        {/* Primary Action Buttons */}
+        <View style={styles.primaryActions}>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.rsvpButton, { backgroundColor: colors.primary }]}
+            onPress={handleRSVP}
+            activeOpacity={0.8}
+          >
+            <FontAwesome name="calendar-check-o" size={20} color="#fff" style={styles.buttonIcon} />
+            <Text style={styles.primaryButtonText}>RSVP for Event</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.shareButton, { borderColor: colors.primary }]}
+            onPress={handleShare}
+            activeOpacity={0.8}
+          >
+            <FontAwesome name="share-alt" size={20} color={colors.primary} style={styles.buttonIcon} />
+            <Text style={[styles.primaryButtonText, { color: colors.primary }]}>Share Event</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Admin Actions */}
         <View style={styles.actions}>
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.primary, opacity: updating ? 0.6 : 1 }]}
@@ -294,9 +427,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  imageContainer: {
+    position: 'relative',
+  },
   image: {
     width: '100%',
     height: 250,
+  },
+  wishlistButton: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   content: {
     padding: 16,
@@ -333,6 +483,29 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 16,
     lineHeight: 24,
+  },
+  primaryActions: {
+    marginBottom: 24,
+    gap: 12,
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+  },
+  rsvpButton: {
+    // backgroundColor is set dynamically
+  },
+  shareButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   actions: {
     flexDirection: 'row',
