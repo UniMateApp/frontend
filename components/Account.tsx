@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { signOut } from '@/services/auth'
 import { Session } from '@supabase/supabase-js'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
@@ -101,7 +102,27 @@ export default function Account({ session }: { session: Session }) {
       </View>
 
       <View style={styles.verticallySpaced}>
-  <Button title="Sign Out" onPress={async () => (await getSupabase()).auth.signOut()} />
+        <Button
+          title="Sign Out"
+          onPress={async () => {
+            const isWeb = typeof window !== 'undefined' && (window as any).document != null
+            if (isWeb) {
+              const ok = window.confirm('Are you sure you want to sign out?')
+              if (!ok) return
+              try {
+                await signOut()
+              } catch (e) {
+                window.alert('Sign out failed. Please try again.')
+              }
+            } else {
+              try {
+                await signOut()
+              } catch (e) {
+                Alert.alert('Sign out failed', 'Please try again.')
+              }
+            }
+          }}
+        />
       </View>
     </View>
   )
