@@ -86,11 +86,12 @@ export default function LostFoundScreen() {
   const handleAdd = async (post: any) => {
     try {
       const created = await createLostFound({
-        type: post.type.toLowerCase(), // Use 'type' instead of 'kind'
-        item_name: post.title, // Use 'item_name' to match the interface
+        kind: post.type.toLowerCase(), // Database uses 'kind' field
+        title: post.title, // Database uses 'title' field
         description: post.description,
-        contact_info: post.contact, // Use 'contact_info' to match the interface
-        is_resolved: false, // Use 'is_resolved' to match the interface
+        contact: post.contact, // Database uses 'contact' field
+        image_url: post.image_url, // Image URL from Supabase Storage
+        resolved: false, // Database uses 'resolved' field
       });
       setPosts(prev => [created, ...prev]);
       Alert.alert('Success', 'Post added successfully!');

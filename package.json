@@ -20,9 +20,11 @@
     "@supabase/supabase-js": "^2.58.0",
     "expo": "~54.0.12",
     "expo-constants": "~18.0.9",
+    "expo-file-system": "~19.0.19",
     "expo-font": "~14.0.8",
     "expo-haptics": "~15.0.7",
     "expo-image": "~3.0.8",
+    "expo-image-picker": "~17.0.8",
     "expo-linking": "~8.0.8",
     "expo-router": "~6.0.10",
     "expo-splash-screen": "~31.0.10",
@@ -43,6 +45,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "@types/react-native": "^0.72.8",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
