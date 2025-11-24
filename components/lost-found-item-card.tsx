@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/theme';
+import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { FontAwesome } from '@expo/vector-icons';
 import React, { useState } from 'react';
@@ -39,6 +40,8 @@ export default function LostFoundItemCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [showFullDescription, setShowFullDescription] = useState(false);
+  const { user } = useUser();
+  const isOwner = Boolean(user && item.created_by && String(user.id) === String(item.created_by));
 
   const handleWishlistToggle = async () => {
     try {
@@ -185,7 +188,8 @@ export default function LostFoundItemCard({
             </TouchableOpacity>
             
               {/* Single-delete button: visually Delete but marks item as resolved in DB */}
-              {!item.is_resolved && (
+              {/* Only the creator of the post may mark it resolved. Hide the button for others. */}
+              {!item.is_resolved && isOwner && (
                 <TouchableOpacity
                   style={[styles.deleteButton, { borderColor: '#e74c3c' }]}
                   onPress={() =>
