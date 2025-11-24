@@ -1,7 +1,8 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type Props = {
   visible: boolean;
@@ -17,7 +18,10 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [organizer, setOrganizer] = useState('');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(new Date());
+  const [time, setTime] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -31,11 +35,12 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
       
       // Format date from database timestamp
       if (initialData.start_at) {
-        const date = new Date(initialData.start_at);
-        const formatted = date.toISOString().split('T')[0]; // YYYY-MM-DD
-        setDate(formatted);
+        const dateObj = new Date(initialData.start_at);
+        setDate(dateObj);
+        setTime(dateObj);
       } else {
-        setDate('');
+        setDate(new Date());
+        setTime(new Date());
       }
       
       setLocation(initialData.location || '');
@@ -51,6 +56,32 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
       }
     }
   }, [visible, initialData]);
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (event.type === 'set' && selectedDate) {
+      setDate(selectedDate);
+    }
+  };
+
+  const onTimeChange = (event: any, selectedTime?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
+    if (event.type === 'set' && selectedTime) {
+      setTime(selectedTime);
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const formatTime = (time: Date) => {
+    return time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
 
   const submit = () => {
     if (!title.trim()) {
@@ -70,11 +101,17 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
       }
     }
 
+    // Combine date and time into a single timestamp
+    const combinedDateTime = new Date(date);
+    combinedDateTime.setHours(time.getHours());
+    combinedDateTime.setMinutes(time.getMinutes());
+    combinedDateTime.setSeconds(0);
+
     const updatedEvent = {
       title: title.trim(),
       category: category.trim() || null,
       organizer: organizer.trim() || null,
-      start_at: date || null,
+      start_at: combinedDateTime.toISOString(),
       location: location.trim() || null,
       description: description.trim() || null,
       price: priceValue,
@@ -88,7 +125,8 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
     setTitle('');
     setCategory('');
     setOrganizer('');
-    setDate('');
+    setDate(new Date());
+    setTime(new Date());
     setLocation('');
     setDescription('');
     setPrice('');
@@ -129,14 +167,31 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
               style={[styles.input, { color: colors.text, borderColor: colors.cardBorder, backgroundColor: colors.background }]} 
             />
 
-            <Text style={[styles.label, { color: colors.text }]}>Date (YYYY-MM-DD)</Text>
-            <TextInput 
-              placeholder="2025-10-20" 
-              placeholderTextColor={colors.textSecondary} 
-              value={date} 
-              onChangeText={setDate} 
-              style={[styles.input, { color: colors.text, borderColor: colors.cardBorder, backgroundColor: colors.background }]} 
-            />
+            <Text style={[styles.label, { color: colors.text }]}>Date</Text>
+            <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.input, styles.pickerButton, { borderColor: colors.cardBorder, backgroundColor: colors.background }]}>
+              <Text style={{ color: colors.text }}>{formatDate(date)}</Text>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onDateChange}
+              />
+            )}
+
+            <Text style={[styles.label, { color: colors.text }]}>Time</Text>
+            <TouchableOpacity onPress={() => setShowTimePicker(true)} style={[styles.input, styles.pickerButton, { borderColor: colors.cardBorder, backgroundColor: colors.background }]}>
+              <Text style={{ color: colors.text }}>{formatTime(time)}</Text>
+            </TouchableOpacity>
+            {showTimePicker && (
+              <DateTimePicker
+                value={time}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onTimeChange}
+              />
+            )}
 
             <Text style={[styles.label, { color: colors.text }]}>Location</Text>
             <TextInput 
@@ -222,6 +277,9 @@ const styles = StyleSheet.create({
     minHeight: 100,
     fontSize: 16,
     textAlignVertical: 'top',
+  },
+  pickerButton: {
+    justifyContent: 'center',
   },
   actionsRow: { 
     flexDirection: 'row', 

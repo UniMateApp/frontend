@@ -3,6 +3,7 @@ import { EventCard } from '@/components/event-card';
 import { SearchBar } from '@/components/search-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useEventScheduler } from '@/hooks/useEventScheduler';
 import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
 import {
   Event,
@@ -23,6 +24,29 @@ export default function EventsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const hasFocusedOnce = useRef(false);
+  const hasRequestedPermissions = useRef(false);
+
+  // Initialize location-based event reminders
+  const {
+    isReady: isSchedulerReady,
+    hasNotificationPermission,
+    hasLocationPermission,
+    requestPermissions,
+  } = useEventScheduler(eventsWithWishlist, {
+    enabled: true,
+    autoSchedule: true, // Automatically schedule reminders when events change
+  });
+
+  // Request permissions on first load (only once)
+  useEffect(() => {
+    if (
+      !hasRequestedPermissions.current &&
+      (!hasNotificationPermission || !hasLocationPermission)
+    ) {
+      hasRequestedPermissions.current = true;
+      requestPermissions();
+    }
+  }, [hasNotificationPermission, hasLocationPermission, requestPermissions]);
 
   const events = useMemo(() => {
     const q = query.trim().toLowerCase();
