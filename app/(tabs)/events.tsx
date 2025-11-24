@@ -11,6 +11,8 @@ import {
   getEventsWithWishlistStatus,
   removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
+import { sendTestNotification, forceCheckLocation } from '@/services/immediateNotifier';
+import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -25,6 +27,7 @@ export default function EventsScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const hasFocusedOnce = useRef(false);
   const hasRequestedPermissions = useRef(false);
+  const [isBackgroundTaskActive, setIsBackgroundTaskActive] = useState(false);
 
   // Initialize location-based event reminders
   const {
@@ -47,6 +50,15 @@ export default function EventsScreen() {
       requestPermissions();
     }
   }, [hasNotificationPermission, hasLocationPermission, requestPermissions]);
+
+  // Check background task status
+  useEffect(() => {
+    const checkBackgroundTask = async () => {
+      const isRegistered = await isBackgroundTaskRegistered();
+      setIsBackgroundTaskActive(isRegistered);
+    };
+    checkBackgroundTask();
+  }, []);
 
   const events = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -140,6 +152,44 @@ export default function EventsScreen() {
       window.alert(`RSVP for "${event.title}" - Feature coming soon!`);
     } else {
       Alert.alert('RSVP', `RSVP for "${event.title}" - Feature coming soon!`);
+    }
+  };
+
+  // Test notification functions
+  const handleTestNotification = async () => {
+    try {
+      await sendTestNotification();
+      Alert.alert('Success', 'Test notification sent! Check your notification tray.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send test notification');
+    }
+  };
+
+  const handleCheckLocation = async () => {
+    try {
+      const { withinRadius, distance } = await forceCheckLocation();
+      Alert.alert(
+        'Location Check',
+        withinRadius
+          ? `✅ You are within campus radius!\nDistance: ${distance?.toFixed(2)} km`
+          : `⚠️ You are outside campus radius.\nDistance: ${distance?.toFixed(2)} km`
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to check location');
+    }
+  };
+
+  const handleToggleBackgroundTask = async () => {
+    try {
+      if (isBackgroundTaskActive) {
+        Alert.alert('Info', 'Background task is already running. It checks events every minute.');
+      } else {
+        await registerBackgroundTask();
+        setIsBackgroundTaskActive(true);
+        Alert.alert('Success', 'Background task started! Notifications will work even when app is closed.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to start background task');
     }
   };
 
@@ -285,6 +335,38 @@ export default function EventsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Test notification buttons - Only show in development */}
+      {__DEV__ && (
+        <View style={styles.testButtons}>
+          <Text style={[styles.testTitle, { color: colors.textSecondary }]}>🧪 Test Notifications:</Text>
+          <View style={styles.testButtonRow}>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: colors.primary }]}
+              onPress={handleTestNotification}>
+              <Text style={styles.testButtonText}>📨 Test</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: colors.primary }]}
+              onPress={handleCheckLocation}>
+              <Text style={styles.testButtonText}>📍 Location</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: colors.primary }]}
+              onPress={requestPermissions}>
+              <Text style={styles.testButtonText}>🔐 Perms</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: isBackgroundTaskActive ? '#4CAF50' : colors.primary }]}
+              onPress={handleToggleBackgroundTask}>
+              <Text style={styles.testButtonText}>🔄 BG Task</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            Perms: {hasNotificationPermission ? '✅' : '❌'} Notif | {hasLocationPermission ? '✅' : '❌'} Location | BG: {isBackgroundTaskActive ? '✅' : '❌'}
+          </Text>
+        </View>
+      )}
+
       <SearchBar onSearch={handleSearch} />
 
       {events.map((e: Event & { isInWishlist: boolean }) => (
@@ -342,5 +424,40 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+  },
+  testButtons: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 123, 255, 0.3)',
+  },
+  testTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  testButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  testButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  statusText: {
+    fontSize: 10,
+    marginTop: 4,
   },
 });

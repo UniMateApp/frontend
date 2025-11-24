@@ -3,7 +3,7 @@
  * Handles scheduling and canceling background tasks for event reminders
  */
 
-import { REMINDER_TIME_BEFORE_EVENT_HOURS } from '@/constants/campus';
+import { REMINDER_TIME_BEFORE_EVENT_MINUTES } from '@/constants/campus';
 import { Event } from '@/services/selectiveWishlist';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -116,8 +116,8 @@ function calculateTriggerTime(eventStartTime: string): number | null {
       return null;
     }
 
-    // Calculate 1 hour before event
-    const reminderTime = new Date(eventDate.getTime() - REMINDER_TIME_BEFORE_EVENT_HOURS * 2 * 60 * 1000);
+    // Calculate reminder time before event (e.g., 2 minutes for testing)
+    const reminderTime = new Date(eventDate.getTime() - REMINDER_TIME_BEFORE_EVENT_MINUTES * 60 * 1000);
     const now = new Date();
 
     // Only schedule if reminder time is in the future

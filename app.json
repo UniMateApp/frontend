@@ -9,7 +9,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus.",
+        "NSLocationWhenInUseUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus.",
+        "NSLocationAlwaysUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus, even when the app is in the background."
+      }
     },
     "android": {
       "adaptiveIcon": {

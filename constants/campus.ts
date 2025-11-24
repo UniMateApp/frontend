@@ -12,4 +12,6 @@ export const CAMPUS_COORDINATES = {
 
 export const NOTIFICATION_RADIUS_KM = 2; // 2 kilometers
 
-export const REMINDER_TIME_BEFORE_EVENT_HOURS = 1; // 1 hour before event
+// For testing: 2 minutes before event
+// For production: change to 60 (1 hour before event)
+export const REMINDER_TIME_BEFORE_EVENT_MINUTES = 2; // 2 minutes for testing

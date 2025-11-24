@@ -1,15 +1,14 @@
 /**
- * Custom hook for automatically scheduling event reminders
- * Watches the event list and manages background notification scheduling
+ * Custom hook for automatically checking location and sending immediate notifications
+ * Watches the event list and checks user location to send notifications when within campus
  */
 
 import {
-    cleanupPastReminders,
     configureNotificationHandler,
     requestNotificationPermissions,
-    scheduleMultipleEventReminders,
-    syncNotificationsWithEvents,
 } from '@/services/backgroundScheduler';
+import { checkAndNotifyEvents } from '@/services/immediateNotifier';
+import { cacheEventsForBackground } from '@/services/backgroundTaskService';
 import { Event } from '@/services/selectiveWishlist';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
@@ -119,9 +118,6 @@ export function useEventScheduler(
         console.log('[EventScheduler] ⚠️ Scheduler initialized but permissions missing');
       }
 
-      // Clean up old notifications
-      await cleanupPastReminders();
-
       isInitialized.current = true;
     } catch (error) {
       console.error('[EventScheduler] ❌ Error initializing:', error);
@@ -129,7 +125,7 @@ export function useEventScheduler(
   };
 
   /**
-   * Schedule reminders for a list of events
+   * Check location and send immediate notifications for events
    */
   const scheduleEvents = async (eventsToSchedule: Event[]): Promise<void> => {
     if (!isReady) {
@@ -138,7 +134,7 @@ export function useEventScheduler(
     }
 
     try {
-      console.log(`[EventScheduler] 📅 Scheduling reminders for ${eventsToSchedule.length} events...`);
+      console.log(`[EventScheduler] 🔍 Checking location and notifying for ${eventsToSchedule.length} events...`);
       
       // Filter events that have a start time and are in the future
       const now = new Date();
@@ -150,18 +146,27 @@ export function useEventScheduler(
 
       console.log(`[EventScheduler] Found ${upcomingEvents.length} upcoming events`);
 
-      // Sync with current event list (cancel outdated notifications)
-      await syncNotificationsWithEvents(upcomingEvents);
+      // Cache events for background task (only events with start_at)
+      await cacheEventsForBackground(
+        upcomingEvents
+          .filter((e) => e.start_at)
+          .map((e) => ({
+            id: e.id,
+            title: e.title,
+            location: e.location || 'campus',
+            start_at: e.start_at!,
+          }))
+      );
 
-      // Schedule new reminders
-      await scheduleMultipleEventReminders(upcomingEvents);
+      // Check location and send immediate notifications
+      await checkAndNotifyEvents(upcomingEvents);
 
       // Update tracking
       lastScheduledEvents.current = new Set(upcomingEvents.map((e) => e.id));
       
-      console.log('[EventScheduler] ✅ Scheduling complete');
+      console.log('[EventScheduler] ✅ Location check complete');
     } catch (error) {
-      console.error('[EventScheduler] ❌ Error scheduling events:', error);
+      console.error('[EventScheduler] ❌ Error checking events:', error);
     }
   };
 
@@ -174,7 +179,7 @@ export function useEventScheduler(
   }, [enabled]);
 
   /**
-   * Auto-schedule events when they change
+   * Auto-check location and notify when events change
    */
   useEffect(() => {
     if (!autoSchedule || !isReady || events.length === 0) {
@@ -188,21 +193,13 @@ export function useEventScheduler(
       [...currentEventIds].some((id) => !lastScheduledEvents.current.has(id));
 
     if (hasChanged) {
-      console.log('Events changed, rescheduling reminders...');
+      console.log('[EventScheduler] Events changed, checking location and notifying...');
       scheduleEvents(events);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, isReady, autoSchedule]);
 
-  /**
-   * Clean up on unmount
-   */
-  useEffect(() => {
-    return () => {
-      // Optional: Cancel all reminders on unmount (usually not desired)
-      // cancelAllEventReminders();
-    };
-  }, []);
+
 
   return {
     isReady,
