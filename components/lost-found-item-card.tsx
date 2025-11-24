@@ -1,11 +1,11 @@
 import { Colors } from '@/constants/theme';
 import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getPlaceNameFromLatLng, parseLatLng } from '@/services/geocode';
+import { openDirectionsTo } from '@/utils/maps';
 import { FontAwesome } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Linking from 'expo-linking';
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, ImageSourcePropType, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ImageSourcePropType, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface LostFoundItemProps {
   item: {
@@ -67,103 +67,20 @@ export default function LostFoundItemCard({
     return DEFAULT_LOST_FOUND_IMAGE;
   };
 
-  const parseLatLng = (loc?: string) => {
-    if (!loc) return null;
-    const parts = String(loc).split(',').map(s => s.trim());
-    if (parts.length < 2) return null;
-    const lat = Number(parts[0]);
-    const lng = Number(parts[1]);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return { latitude: lat, longitude: lng };
-    return null;
-  };
-
-  // Reverse geocoding: use a small in-memory cache plus AsyncStorage so results persist
-  const geocodeCache = (global as any).__UM_GeocodeCache ||= new Map<string, string | null>();
   const [placeName, setPlaceName] = useState<string | null>(null);
-  const ASYNC_PREFIX = 'um:geocode:';
-
-  const getCachedPlaceAsync = async (key: string) => {
-    try {
-      if (geocodeCache.has(key)) return geocodeCache.get(key) ?? null;
-      const raw = await AsyncStorage.getItem(ASYNC_PREFIX + key);
-      if (raw != null) {
-        try {
-          const parsed = JSON.parse(raw);
-          geocodeCache.set(key, parsed);
-          return parsed;
-        } catch (e) {
-          // stored value not JSON - fall back
-          geocodeCache.set(key, raw);
-          return raw;
-        }
-      }
-      return null;
-    } catch (e) {
-      console.warn('AsyncStorage read failed for geocode', e);
-      return null;
-    }
-  };
-
-  const setCachedPlaceAsync = async (key: string, value: string | null) => {
-    try {
-      geocodeCache.set(key, value);
-      await AsyncStorage.setItem(ASYNC_PREFIX + key, JSON.stringify(value));
-    } catch (e) {
-      console.warn('AsyncStorage write failed for geocode', e);
-    }
-  };
 
   useEffect(() => {
     let mounted = true;
     const coords = parseLatLng(item.location);
     if (!coords) return;
-    const key = `${coords.latitude},${coords.longitude}`;
 
     (async () => {
-      const cached = await getCachedPlaceAsync(key);
-      if (cached !== null) {
-        if (mounted) setPlaceName(cached);
-        return;
-      }
-
-      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&accept-language=en`;
-      const headers: Record<string,string> = {
-        'Content-Type': 'application/json',
-        // Replace with your app/contact info in production
-        'User-Agent': 'Uni_Mate/1.0 (+https://your-app.example)',
-        'Referer': 'https://your-app.example'
-      };
-
-      let attempt = 0;
-      const maxAttempts = 3;
-      const backoff = (n: number) => new Promise(res => setTimeout(res, 200 * n));
-
-      while (attempt < maxAttempts) {
-        try {
-          const res = await fetch(url, { headers });
-          if (!res.ok) {
-            attempt++;
-            if (attempt >= maxAttempts) throw new Error(`Geocode request failed: ${res.status}`);
-            await backoff(attempt);
-            continue;
-          }
-          const data = await res.json();
-          const name = data?.name || data?.display_name || null;
-          await setCachedPlaceAsync(key, name);
-          console.debug && console.debug(`Geocode success: ${key} -> ${name}`);
-          if (mounted) setPlaceName(name);
-          return;
-        } catch (err) {
-          attempt++;
-          if (attempt >= maxAttempts) {
-            console.warn('Reverse geocode failed', err);
-            await setCachedPlaceAsync(key, null);
-            console.debug && console.debug(`Geocode failed: ${key} -> null (${String(err)})`);
-            if (mounted) setPlaceName(null);
-            return;
-          }
-          await backoff(attempt);
-        }
+      try {
+        const name = await getPlaceNameFromLatLng(coords.latitude, coords.longitude);
+        if (mounted) setPlaceName(name);
+      } catch (err) {
+        console.warn('geocode: failed to resolve place name', err);
+        if (mounted) setPlaceName(null);
       }
     })();
 
@@ -178,20 +95,10 @@ export default function LostFoundItemCard({
       return;
     }
 
-    // Open directions using destination only; the maps app will use current location as origin.
-    const destStr = `${dest.latitude},${dest.longitude}`;
-    const iosUrl = `http://maps.apple.com/?daddr=${destStr}`;
-    const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${destStr}&travelmode=driving`;
-    const url = (Platform.OS === 'ios') ? iosUrl : googleUrl;
-
     try {
-      await Linking.openURL(url);
+      await openDirectionsTo(dest.latitude, dest.longitude);
     } catch (err) {
-      try {
-        await Linking.openURL(googleUrl);
-      } catch (e) {
-        Alert.alert('Could not open maps', 'Unable to open maps on this device.');
-      }
+      Alert.alert('Could not open maps', String((err as Error).message || 'Unable to open maps on this device.'));
     }
   };
 
