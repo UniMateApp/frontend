@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/theme';
+import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getLostFoundItemById, resolveLostFoundItem } from '@/services/lostFound';
 import { addLostFoundToWishlist, isLostFoundInWishlist, removeItemFromWishlist } from '@/services/selectiveWishlist';
@@ -25,6 +26,8 @@ export default function LostFoundDetailsScreen() {
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const { user } = useUser();
+  const isOwner = Boolean(user && item && item.created_by && String(user.id) === String(item.created_by));
 
   const fetchItem = async () => {
     try {
@@ -335,20 +338,23 @@ export default function LostFoundDetailsScreen() {
 
           {/* Resolve action removed: Delete now marks item as resolved */}
 
-          <TouchableOpacity 
-            style={[styles.deleteButton, { borderColor: '#e74c3c' }]} 
-            onPress={handleDelete}
-            disabled={updating}
-          >
-            {updating ? (
-              <ActivityIndicator size="small" color="#e74c3c" />
-            ) : (
-              <>
-                <FontAwesome name="trash-o" size={16} color="#e74c3c" />
-                <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Mark Resolved</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {/* Only the creator may mark the post resolved */}
+          {isOwner && (
+            <TouchableOpacity 
+              style={[styles.deleteButton, { borderColor: '#e74c3c' }]} 
+              onPress={handleDelete}
+              disabled={updating}
+            >
+              {updating ? (
+                <ActivityIndicator size="small" color="#e74c3c" />
+              ) : (
+                <>
+                  <FontAwesome name="trash-o" size={16} color="#e74c3c" />
+                  <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Mark Resolved</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </ScrollView>

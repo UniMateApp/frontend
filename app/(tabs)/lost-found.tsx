@@ -1,4 +1,5 @@
 import { SearchBar } from '@/components/search-bar';
+import { useUser } from '@/contexts/UserContext';
 import { supabase } from '@/services/supabase';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -33,9 +34,12 @@ export default function LostFoundScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+
+  const { user } = useUser();
 
   const open = () => setModalVisible(true);
   const close = () => setModalVisible(false);
@@ -143,7 +147,13 @@ export default function LostFoundScreen() {
   };
 
   // Only show posts that are not resolved so "deleted" (resolved) items are hidden
-  const data = useMemo(() => posts.filter(p => !p.is_resolved), [posts]);
+  const data = useMemo(() => {
+    const base = posts.filter(p => !p.is_resolved);
+    if (filterMode === 'mine' && user?.id) {
+      return base.filter(p => String(p.created_by) === String(user.id));
+    }
+    return base;
+  }, [posts, filterMode, user]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -151,9 +161,26 @@ export default function LostFoundScreen() {
 
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: colors.text }]}>Lost & Found</Text>
-        <TouchableOpacity onPress={open} style={[styles.addButton, { borderColor: colors.cardBorder }]}>
-          <Text style={{ color: colors.primary, fontWeight: '700' }}>+ Add Post</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.segmentedWrapper}>
+            <TouchableOpacity
+              onPress={() => setFilterMode('all')}
+              style={[styles.segmentButton, filterMode === 'all' ? { backgroundColor: colors.primary } : { borderColor: colors.cardBorder }]}
+            >
+              <Text style={{ color: filterMode === 'all' ? '#fff' : colors.primary, fontWeight: '700' }}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setFilterMode('mine')}
+              disabled={!user}
+              style={[styles.segmentButton, filterMode === 'mine' ? { backgroundColor: colors.primary } : { borderColor: colors.cardBorder }, !user ? { opacity: 0.5 } : null]}
+            >
+              <Text style={{ color: filterMode === 'mine' ? '#fff' : colors.primary, fontWeight: '700' }}>My Posts</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={open} style={[styles.addButton, { borderColor: colors.cardBorder, marginLeft: 8 }]}>
+            <Text style={{ color: colors.primary, fontWeight: '700' }}>+ Add Post</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading && <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />}
@@ -194,6 +221,9 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: '700' },
   addButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  myPostsButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  segmentedWrapper: { flexDirection: 'row', borderRadius: 8, overflow: 'hidden', borderWidth: 1 },
+  segmentButton: { paddingVertical: 8, paddingHorizontal: 12 },
   empty: { padding: 24, alignItems: 'center' },
   card: { marginHorizontal: 16, marginVertical: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
