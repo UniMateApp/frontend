@@ -4,11 +4,11 @@
  */
 
 import { CAMPUS_COORDINATES, NOTIFICATION_RADIUS_KM, REMINDER_TIME_BEFORE_EVENT_MINUTES } from '@/constants/campus';
+import { Event } from '@/services/selectiveWishlist';
 import { calculateHaversineDistance } from '@/utils/distance';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
-import { Event } from '@/services/selectiveWishlist';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NOTIFIED_EVENTS_KEY = '@notified_events';
 

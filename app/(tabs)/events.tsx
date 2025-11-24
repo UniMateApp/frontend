@@ -4,15 +4,15 @@ import { SearchBar } from '@/components/search-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEventScheduler } from '@/hooks/useEventScheduler';
+import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService';
 import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
+import { forceCheckLocation, sendTestNotification } from '@/services/immediateNotifier';
 import {
   Event,
   addEventToWishlist,
   getEventsWithWishlistStatus,
   removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
-import { sendTestNotification, forceCheckLocation } from '@/services/immediateNotifier';
-import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';

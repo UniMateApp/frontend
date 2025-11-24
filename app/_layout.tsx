@@ -4,10 +4,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { configureNotificationHandler, requestNotificationPermissions } from '@/services/backgroundScheduler';
 import { registerBackgroundTask } from '@/services/backgroundTaskService';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import * as Location from 'expo-location';
 
 export const unstable_settings = {
   anchor: '(tabs)',

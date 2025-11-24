@@ -7,8 +7,8 @@ import {
     configureNotificationHandler,
     requestNotificationPermissions,
 } from '@/services/backgroundScheduler';
-import { checkAndNotifyEvents } from '@/services/immediateNotifier';
 import { cacheEventsForBackground } from '@/services/backgroundTaskService';
+import { checkAndNotifyEvents } from '@/services/immediateNotifier';
 import { Event } from '@/services/selectiveWishlist';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
