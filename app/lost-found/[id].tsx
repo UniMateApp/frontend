@@ -4,7 +4,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getLostFoundItemById, resolveLostFoundItem } from '@/services/lostFound';
 import { addLostFoundToWishlist, isLostFoundInWishlist, removeItemFromWishlist } from '@/services/selectiveWishlist';
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -28,6 +30,103 @@ export default function LostFoundDetailsScreen() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const { user } = useUser();
   const isOwner = Boolean(user && item && item.created_by && String(user.id) === String(item.created_by));
+  const [placeName, setPlaceName] = useState<string | null>(null);
+
+  // simple shared cache for geocoding results + AsyncStorage persistence
+  const geocodeCache = (global as any).__UM_GeocodeCache ||= new Map<string, string | null>();
+  const ASYNC_PREFIX = 'um:geocode:';
+
+  const getCachedPlaceAsync = async (key: string) => {
+    try {
+      if (geocodeCache.has(key)) return geocodeCache.get(key) ?? null;
+      const raw = await AsyncStorage.getItem(ASYNC_PREFIX + key);
+      if (raw != null) {
+        try {
+          const parsed = JSON.parse(raw);
+          geocodeCache.set(key, parsed);
+          return parsed;
+        } catch (e) {
+          geocodeCache.set(key, raw);
+          return raw;
+        }
+      }
+      return null;
+    } catch (e) {
+      console.warn('AsyncStorage read failed for geocode', e);
+      return null;
+    }
+  };
+
+  const setCachedPlaceAsync = async (key: string, value: string | null) => {
+    try {
+      geocodeCache.set(key, value);
+      await AsyncStorage.setItem(ASYNC_PREFIX + key, JSON.stringify(value));
+    } catch (e) {
+      console.warn('AsyncStorage write failed for geocode', e);
+    }
+  };
+
+  // reverse geocode when item is loaded
+  useEffect(() => {
+    let mounted = true;
+    if (!item?.location) return;
+    const parts = String(item.location).split(',').map((s: string) => s.trim());
+    if (parts.length < 2) return;
+    const lat = Number(parts[0]);
+    const lon = Number(parts[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const key = `${lat},${lon}`;
+
+    (async () => {
+      const cached = await getCachedPlaceAsync(key);
+      if (cached !== null) {
+        if (mounted) setPlaceName(cached);
+        return;
+      }
+
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=en`;
+      const headers: Record<string,string> = {
+        'Content-Type': 'application/json',
+        // Replace with your app/contact info in production
+        'User-Agent': 'Uni_Mate/1.0 (+https://your-app.example)',
+        'Referer': 'https://your-app.example'
+      };
+
+      let attempt = 0;
+      const maxAttempts = 3;
+      const backoff = (n: number) => new Promise(res => setTimeout(res, 200 * n));
+
+      while (attempt < maxAttempts) {
+        try {
+          const res = await fetch(url, { headers });
+          if (!res.ok) {
+            attempt++;
+            if (attempt >= maxAttempts) throw new Error(`Geocode request failed: ${res.status}`);
+            await backoff(attempt);
+            continue;
+          }
+          const data = await res.json();
+          const name = data?.name || data?.display_name || null;
+          await setCachedPlaceAsync(key, name);
+          console.debug && console.debug(`Geocode success: ${key} -> ${name}`);
+          if (mounted) setPlaceName(name);
+          return;
+        } catch (err) {
+          attempt++;
+          if (attempt >= maxAttempts) {
+            console.warn('Reverse geocode failed', err);
+            await setCachedPlaceAsync(key, null);
+            console.debug && console.debug(`Geocode failed: ${key} -> null (${String(err)})`);
+            if (mounted) setPlaceName(null);
+            return;
+          }
+          await backoff(attempt);
+        }
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [item?.location]);
 
   const fetchItem = async () => {
     try {
@@ -147,6 +246,41 @@ export default function LostFoundDetailsScreen() {
       }
     } catch (error) {
       console.error('Error sharing:', error);
+    }
+  };
+
+  const parseLatLng = (loc?: string) => {
+    if (!loc) return null;
+    const parts = String(loc).split(',').map(s => s.trim());
+    if (parts.length < 2) return null;
+    const lat = Number(parts[0]);
+    const lng = Number(parts[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { latitude: lat, longitude: lng };
+    return null;
+  };
+
+  const handleGetDirections = async () => {
+    if (isOwner) return;
+    const dest = parseLatLng(item?.location);
+    if (!dest) {
+      Alert.alert('Location not available', 'This post does not have a valid location.');
+      return;
+    }
+
+    // Open maps with destination only; device maps app will use current location as origin.
+    const destStr = `${dest.latitude},${dest.longitude}`;
+    const iosUrl = `http://maps.apple.com/?daddr=${destStr}`;
+    const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${destStr}&travelmode=driving`;
+    const url = (Platform.OS === 'ios') ? iosUrl : googleUrl;
+
+    try {
+      await Linking.openURL(url);
+    } catch (err) {
+      try {
+        await Linking.openURL(googleUrl);
+      } catch (e) {
+        Alert.alert('Could not open maps', 'Unable to open maps on this device.');
+      }
     }
   };
 
@@ -310,7 +444,7 @@ export default function LostFoundDetailsScreen() {
               <FontAwesome name="map-marker" size={16} color={colors.icon} />
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Location:</Text>
               <Text style={[styles.detailValue, { color: colors.text }]}>
-                {item.location}
+                {placeName ? `near ${placeName}` : item.location}
               </Text>
             </View>
           )}
@@ -335,6 +469,16 @@ export default function LostFoundDetailsScreen() {
             <FontAwesome name="share-alt" size={16} color={colors.primary} />
             <Text style={[styles.shareText, { color: colors.primary }]}>Share</Text>
           </TouchableOpacity>
+
+          {!isOwner && item.location && (
+            <TouchableOpacity
+              style={[styles.resolveButton, { borderColor: colors.cardBorder }]}
+              onPress={handleGetDirections}
+            >
+              <FontAwesome name="location-arrow" size={16} color={colors.primary} />
+              <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Directions</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Resolve action removed: Delete now marks item as resolved */}
 
