@@ -4,6 +4,7 @@ import { SearchBar } from '@/components/search-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { listEvents as apiListEvents } from '@/services/events';
+import { resolveLostFoundItem } from '@/services/lostFound';
 import {
   Event,
   MappedLostFoundItem,
@@ -35,18 +36,21 @@ export default function HomeScreen() {
   const filterOptions = ['All', 'Events', 'Lost & Found'];
   const hasFocusedOnce = useRef(false);
 
-  /** Filter items by search + type */
+  /** Filter items by search + type and exclude resolved lost-found items */
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = allItems;
-    
+
     // Filter by item type (Events, Lost & Found, or All)
     if (activeFilter === 'Events') {
       list = list.filter(item => item.itemType === 'event');
     } else if (activeFilter === 'Lost & Found') {
       list = list.filter(item => item.itemType === 'lost_found');
     }
-    
+
+    // Exclude resolved lost-found items so only unresolved are visible
+    list = list.filter(item => !(item.itemType === 'lost_found' && (item as any).is_resolved));
+
     // Filter by search query
     if (!q) return list;
     return list.filter(item => {
@@ -61,6 +65,17 @@ export default function HomeScreen() {
   }, [query, activeFilter, allItems]);
 
   const handleSearch = (text: string) => setQuery(text);
+
+  /** Mark a lost-found item as resolved (acts like delete/resolve) */
+  const handleMarkResolved = async (itemId: string) => {
+    try {
+      await resolveLostFoundItem(String(itemId));
+      setAllItems(prev => prev.map(i => i.id === itemId && i.itemType === 'lost_found' ? { ...i, is_resolved: true } : i));
+    } catch (err: any) {
+      console.error('Failed to mark resolved', err);
+      Alert.alert('Error', err?.message || 'Could not mark item resolved');
+    }
+  };
 
   const handleEventPress = (eventId: string) => {
     router.push({ pathname: '/event/[id]', params: { id: eventId } });
@@ -258,15 +273,8 @@ export default function HomeScreen() {
               }}
               isInWishlist={lostFound.isInWishlist}
               onPress={() => handleLostFoundPress(lostFound.id)}
-              onWishlistToggle={() => handleWishlistToggle(lostFound.id, 'lost_found', lostFound.isInWishlist)}
-              onResolve={(id) => {
-                // Navigate to lost-found screen for full functionality
-                router.push('/(tabs)/lost-found');
-              }}
-              onDelete={(id) => {
-                // Navigate to lost-found screen for full functionality
-                router.push('/(tabs)/lost-found');
-              }}
+              onWishlistToggle={(id, current) => handleWishlistToggle(String(id), 'lost_found', Boolean(current))}
+              onResolve={(id) => handleMarkResolved(String(id))}
             />
           );
         }

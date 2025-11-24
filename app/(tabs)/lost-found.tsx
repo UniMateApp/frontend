@@ -7,7 +7,7 @@ import LostFoundItemCard from '../../components/lost-found-item-card';
 import LostFoundModal from '../../components/lost-found-modal';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
-import { createLostFound, deleteLostFound, resolveLostFound } from '../../services/lostFound';
+import { createLostFound, resolveLostFoundItem } from '../../services/lostFound';
 import {
   addLostFoundToWishlist,
   getLostFoundWithWishlistStatus,
@@ -92,6 +92,7 @@ export default function LostFoundScreen() {
         contact: post.contact, // Database uses 'contact' field
         image_url: post.image_url, // Image URL from Supabase Storage
         resolved: false, // Database uses 'resolved' field
+        location: post.location, // Location as string
       });
       setPosts(prev => [created, ...prev]);
       Alert.alert('Success', 'Post added successfully!');
@@ -106,23 +107,14 @@ export default function LostFoundScreen() {
   /** Resolve post */
   const handleResolve = async (id: string) => {
     try {
-      await resolveLostFound(parseInt(id));
+      await resolveLostFoundItem(String(id));
       setPosts(prev => prev.map(p => (p.id === id ? { ...p, is_resolved: true } : p)));
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Could not mark as resolved');
     }
   };
 
-  /** Delete post */
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteLostFound(parseInt(id));
-      setPosts(prev => prev.filter(p => p.id !== id));
-      Alert.alert('Deleted', 'Post deleted successfully!');
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not delete post');
-    }
-  };
+  // Deletion handled via onResolve (mark resolved); no separate delete handler
 
   /** Toggle wishlist for lost-found item */
   const handleWishlistToggle = async (id: string, isInWishlist: boolean) => {
@@ -150,7 +142,8 @@ export default function LostFoundScreen() {
     router.push({ pathname: '/lost-found/[id]', params: { id } });
   };
 
-  const data = useMemo(() => posts, [posts]);
+  // Only show posts that are not resolved so "deleted" (resolved) items are hidden
+  const data = useMemo(() => posts.filter(p => !p.is_resolved), [posts]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -172,8 +165,7 @@ export default function LostFoundScreen() {
           <LostFoundItemCard 
             item={item} 
             isInWishlist={item.isInWishlist || false}
-            onResolve={handleResolve} 
-            onDelete={handleDelete}
+            onResolve={handleResolve}
             onWishlistToggle={handleWishlistToggle}
             onPress={() => handleItemPress(String(item.id))}
           />

@@ -1,6 +1,6 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { deleteLostFoundItem, getLostFoundItemById, resolveLostFoundItem } from '@/services/lostFound';
+import { getLostFoundItemById, resolveLostFoundItem } from '@/services/lostFound';
 import { addLostFoundToWishlist, isLostFoundInWishlist, removeItemFromWishlist } from '@/services/selectiveWishlist';
 import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -93,49 +93,27 @@ export default function LostFoundDetailsScreen() {
     }
   };
 
-  const handleResolve = async () => {
-    Alert.alert(
-      'Mark as Resolved',
-      'Are you sure you want to mark this item as resolved?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Resolve',
-          style: 'default',
-          onPress: async () => {
-            try {
-              setUpdating(true);
-              await resolveLostFoundItem(String(id));
-              await fetchItem(); // Refresh the item
-            } catch (error: any) {
-              console.error('Error resolving item:', error);
-              Alert.alert('Error', error.message || 'Failed to resolve item');
-            } finally {
-              setUpdating(false);
-            }
-          },
-        },
-      ]
-    );
-  };
+  // Removed separate "Resolve" action: Delete will now mark item as resolved.
 
   const handleDelete = async () => {
+    // Act like "resolve": mark the item as resolved (hidden) instead of permanently deleting
     Alert.alert(
-      'Delete Item',
-      'Are you sure you want to delete this item? This action cannot be undone.',
+      'Mark as Resolved',
+      'This will mark the item as resolved (it will be hidden). Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Mark Resolved',
           style: 'destructive',
           onPress: async () => {
             try {
               setUpdating(true);
-              await deleteLostFoundItem(String(id));
+              await resolveLostFoundItem(String(id));
+              // After resolving, go back to the previous screen
               router.back();
             } catch (error: any) {
-              console.error('Error deleting item:', error);
-              Alert.alert('Error', error.message || 'Failed to delete item');
+              console.error('Error marking item resolved:', error);
+              Alert.alert('Error', error.message || 'Failed to mark item as resolved');
               setUpdating(false);
             }
           },
@@ -355,22 +333,7 @@ export default function LostFoundDetailsScreen() {
             <Text style={[styles.shareText, { color: colors.primary }]}>Share</Text>
           </TouchableOpacity>
 
-          {!item.is_resolved && (
-            <TouchableOpacity 
-              style={[styles.resolveButton, { borderColor: colors.primary }]} 
-              onPress={handleResolve}
-              disabled={updating}
-            >
-              {updating ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <>
-                  <FontAwesome name="check" size={16} color={colors.primary} />
-                  <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Resolve</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
+          {/* Resolve action removed: Delete now marks item as resolved */}
 
           <TouchableOpacity 
             style={[styles.deleteButton, { borderColor: '#e74c3c' }]} 
@@ -382,7 +345,7 @@ export default function LostFoundDetailsScreen() {
             ) : (
               <>
                 <FontAwesome name="trash-o" size={16} color="#e74c3c" />
-                <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Delete</Text>
+                <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Mark Resolved</Text>
               </>
             )}
           </TouchableOpacity>

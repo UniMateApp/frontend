@@ -21,7 +21,6 @@ interface LostFoundItemProps {
     is_resolved?: boolean;
   };
   onResolve: (id: string) => void;
-  onDelete: (id: string) => void;
   onWishlistToggle: (id: string, isInWishlist: boolean) => Promise<void>;
   onPress?: () => void; // For opening detailed view
   isInWishlist: boolean;
@@ -33,7 +32,6 @@ const DEFAULT_LOST_FOUND_IMAGE = require('@/assets/images/icon.png');
 export default function LostFoundItemCard({
   item,
   onResolve,
-  onDelete,
   onWishlistToggle,
   onPress,
   isInWishlist,
@@ -169,12 +167,12 @@ export default function LostFoundItemCard({
           )}
 
           {/* Status indicator */}
-          {item.is_resolved && (
+          {/* {item.is_resolved && (
             <View style={styles.resolvedBanner}>
               <FontAwesome name="check-circle" size={16} color="#5cb85c" />
               <Text style={[styles.resolvedText, { color: '#5cb85c' }]}>Resolved</Text>
             </View>
-          )}
+          )} */}
 
           {/* Action buttons */}
           <View style={styles.actionsRow}>
@@ -186,28 +184,21 @@ export default function LostFoundItemCard({
               <Text style={[styles.shareButtonText, { color: colors.primary }]}>Details</Text>
             </TouchableOpacity>
             
-            {!item.is_resolved && (
-              <TouchableOpacity 
-                style={[styles.resolveButton, { borderColor: colors.primary }]} 
-                onPress={() => onResolve(item.id)}
-                activeOpacity={0.8}>
-                <FontAwesome name="check" size={14} color={colors.primary} style={styles.buttonIcon} />
-                <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Resolve</Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity 
-              style={[styles.deleteButton, { borderColor: '#e74c3c' }]} 
-              onPress={() =>
-                Alert.alert('Delete Item', 'Are you sure you want to delete this item?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete', style: 'destructive', onPress: () => onDelete(item.id) },
-                ])
-              }
-              activeOpacity={0.8}>
-              <FontAwesome name="trash-o" size={14} color="#e74c3c" style={styles.buttonIcon} />
-              <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Delete</Text>
-            </TouchableOpacity>
+              {/* Single-delete button: visually Delete but marks item as resolved in DB */}
+              {!item.is_resolved && (
+                <TouchableOpacity
+                  style={[styles.deleteButton, { borderColor: '#e74c3c' }]}
+                  onPress={() =>
+                    Alert.alert('Mark as Resolved', 'This will mark the item as resolved (it will be hidden). Continue?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Mark Resolved', style: 'destructive', onPress: () => onResolve(item.id) },
+                    ])
+                  }
+                  activeOpacity={0.8}>
+                  <FontAwesome name="trash-o" size={14} color="#e74c3c" style={styles.buttonIcon} />
+                  <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Mark Resolved</Text>
+                </TouchableOpacity>
+              )}
           </View>
         </View>
       </TouchableOpacity>
