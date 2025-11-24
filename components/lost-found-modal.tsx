@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { createNotifications } from '@/services/notifications';
 import { supabase } from '@/services/supabase';
 import { FontAwesome } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -165,7 +166,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     setSelectedLocation({ latitude, longitude });
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!title.trim()) return;
 
     const post = {
@@ -182,10 +183,87 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
       : null,
     };
 
+    console.log('📝 Submitting data with image:', post);
 
-    console.log("📝 Submitting data with image:", post);
-    onSubmit(post);
-    // reset
+    try {
+      // Await the parent handler so we only notify after DB insert completes
+      const result = await onSubmit(post as any);
+
+      // After successful submission, notify other users who posted the opposite kind
+      try {
+        const client = await supabase();
+        // get current user id (may be null if anonymous)
+        let currentUserId: string | null = null;
+        try {
+          const { data: userRes } = await client.auth.getUser();
+          currentUserId = userRes?.user?.id ?? null;
+        } catch (e) {
+          // ignore
+        }
+
+        const oppositeKind = (type === 'Lost') ? 'found' : 'lost';
+
+        const { data: others, error: fetchErr } = await client
+          .from('lost_found')
+          .select('*')
+          .eq('resolved', false)
+          .eq('kind', oppositeKind)
+          .neq('created_by', currentUserId);
+
+        if (fetchErr) {
+          console.error('Failed to fetch opposite posts for notifications', fetchErr);
+        } else if (others && others.length) {
+          // Group posts by recipient (created_by) to avoid sending multiple notifications
+          const byRecipient = new Map<string, any[]>();
+          for (const o of others) {
+            const rid = String(o.created_by || '');
+            if (!rid) continue;
+            if (!byRecipient.has(rid)) byRecipient.set(rid, []);
+            byRecipient.get(rid)!.push(o);
+          }
+
+          // Build one notification per recipient
+          const notifications: any[] = [];
+          for (const [recipientId, postsForUser] of byRecipient.entries()) {
+            if (!recipientId || recipientId === currentUserId) continue; // skip bad or self
+
+            const matchedIds = postsForUser.map(p => String(p.id));
+            const metadata = {
+              matched_post_ids: matchedIds,
+              new_post_client_id: post.id,
+              kind: post.type.toLowerCase(),
+              location: post.location,
+            };
+
+            notifications.push({
+              recipient_id: recipientId,
+              sender_id: currentUserId,
+              title: `${type} posted: ${post.title}`,
+              message: post.description || '',
+              metadata: JSON.stringify(metadata),
+              read: false,
+              created_at: new Date().toISOString(),
+            });
+          }
+
+          if (notifications.length) {
+            try {
+              await createNotifications(notifications);
+              console.log('Notifications created for opposite-type posters', notifications.length);
+            } catch (nErr) {
+              console.error('Failed to create notifications', nErr);
+            }
+          }
+        }
+      } catch (notifyErr) {
+        console.error('Notification flow failed', notifyErr);
+      }
+
+    } catch (err) {
+      console.error('Submit handler failed', err);
+    }
+
+    // reset UI regardless of notification outcome
     setType('Lost');
     setTitle('');
     setDescription('');
