@@ -139,7 +139,12 @@ function isEventStartingSoon(eventStartTime: string): boolean {
 /**
  * Define the background task
  */
-TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async () => {
+TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async ({ data, error }: any) => {
+  if (error) {
+    console.error('[BackgroundTask] ❌ Task error:', error);
+    return;
+  }
+
   try {
     console.log('[BackgroundTask] 🔄 Background task triggered at', new Date().toLocaleTimeString());
 
@@ -155,18 +160,13 @@ TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async () => {
 
     console.log('[BackgroundTask] Checking', events.length, 'events');
 
-    // Check location permission
-    const { status } = await Location.getForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      console.log('[BackgroundTask] ⚠️ Location permission not granted');
+    // Get location from task data (provided by background location updates)
+    if (!data || !data.locations || data.locations.length === 0) {
+      console.log('[BackgroundTask] ⚠️ No location data in task');
       return;
     }
 
-    // Get current location
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-
+    const location = data.locations[0];
     const userLat = location.coords.latitude;
     const userLng = location.coords.longitude;
 

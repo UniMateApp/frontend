@@ -85,6 +85,13 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
   try {
     console.log('[ImmediateNotifier] 📍 Getting user location...');
     
+    // Check if location services are enabled
+    const isEnabled = await Location.hasServicesEnabledAsync();
+    if (!isEnabled) {
+      console.warn('[ImmediateNotifier] ⚠️ Location services are disabled on device');
+      return { withinRadius: false, distance: null, location: null };
+    }
+
     // Check if location permission is granted
     const { status } = await Location.getForegroundPermissionsAsync();
     if (status !== 'granted') {
@@ -92,10 +99,16 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
       return { withinRadius: false, distance: null, location: null };
     }
 
-    // Get current location
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    // Get current location with timeout
+    const location = await Promise.race([
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+        mayShowUserSettingsDialog: true,
+      }),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Location request timeout')), 10000)
+      )
+    ]);
 
     const userLat = location.coords.latitude;
     const userLng = location.coords.longitude;
@@ -122,8 +135,15 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
     }
 
     return { withinRadius, distance, location };
-  } catch (error) {
-    console.error('[ImmediateNotifier] ❌ Error checking user location:', error);
+  } catch (error: any) {
+    if (error.message === 'Location request timeout') {
+      console.error('[ImmediateNotifier] ❌ Location request timed out - location services may be slow or unavailable');
+    } else if (error.message?.includes('location services')) {
+      console.error('[ImmediateNotifier] ❌ Location services disabled:', error.message);
+      console.error('[ImmediateNotifier] 💡 Enable location in: Settings → Location → Turn on');
+    } else {
+      console.error('[ImmediateNotifier] ❌ Error checking user location:', error);
+    }
     return { withinRadius: false, distance: null, location: null };
   }
 }

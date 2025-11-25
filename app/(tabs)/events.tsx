@@ -8,11 +8,12 @@ import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/b
 import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
 import { forceCheckLocation, sendTestNotification } from '@/services/immediateNotifier';
 import {
-  Event,
-  addEventToWishlist,
-  getEventsWithWishlistStatus,
-  removeItemFromWishlist,
+    Event,
+    addEventToWishlist,
+    getEventsWithWishlistStatus,
+    removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
+import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -167,6 +168,22 @@ export default function EventsScreen() {
 
   const handleCheckLocation = async () => {
     try {
+      // First check if location services are enabled (if available)
+      try {
+        const isEnabled = await Location.hasServicesEnabledAsync();
+        if (!isEnabled) {
+          Alert.alert(
+            'Location Services Disabled',
+            'Please enable location services in your device settings:\n\nSettings → Location → Turn on',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      } catch {
+        // hasServicesEnabledAsync might not be available, continue anyway
+        console.log('[Events] Location services check not available');
+      }
+
       const { withinRadius, distance } = await forceCheckLocation();
       Alert.alert(
         'Location Check',
