@@ -32,28 +32,31 @@ const styles = StyleSheet.create({
 
 function AuthContent({ children }: { children: ReactNode }) {
   const { user, loading } = useUser();
-  const [spinValue] = React.useState(new Animated.Value(0));
+  const [scaleValue] = React.useState(new Animated.Value(1));
 
   React.useEffect(() => {
     Animated.loop(
-      Animated.timing(spinValue, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
+      Animated.sequence([
+        Animated.timing(scaleValue, {
+          toValue: 1.2,
+          duration: 600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleValue, {
+          toValue: 1,
+          duration: 600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
     ).start();
-  }, [spinValue]);
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  }, [scaleValue]);
 
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: '#ffffff' }]}>
-        <Animated.View style={[styles.iconContainer, { transform: [{ rotate: spin }] }]}>
+        <Animated.View style={[styles.iconContainer, { transform: [{ scale: scaleValue }] }]}>
           <Image
             source={require('../assets/images/unimate.png')}
             style={styles.icon}
