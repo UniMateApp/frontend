@@ -31,6 +31,18 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !selectedLocation || !imageUrl;
+
+  const getMissingFields = () => {
+    const missing = [] as string[];
+    if (!title.trim()) missing.push('Item name');
+    if (!description.trim()) missing.push('Description');
+    if (!contact.trim()) missing.push('Contact');
+    if (!imageUrl) missing.push('Photo');
+    if (!selectedLocation) missing.push('Location');
+    return missing;
+  };
+
   const requestPermissions = async () => {
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     const mediaLibraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -167,7 +179,14 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
   };
 
   const submit = async () => {
-    if (!title.trim()) return;
+    if (isPostDisabled) {
+      const missing = getMissingFields();
+      const message = missing.length
+        ? `Please complete: ${missing.join(', ')}`
+        : 'Please add a photo, pick a location, and fill in all fields before posting.';
+      Alert.alert('Missing details', message);
+      return;
+    }
 
     const post = {
       id: String(Date.now()),
@@ -430,7 +449,10 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
               <Text style={{ color: colors.text }}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={submit}>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: isPostDisabled ? colors.cardBorder : colors.primary, opacity: isPostDisabled ? 0.7 : 1 }]}
+              onPress={submit}
+            >
               <Text style={{ color: '#fff' }}>Post</Text>
             </TouchableOpacity>
           </View>
