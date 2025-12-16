@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 
 
 type Props = {
@@ -173,11 +173,6 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     setImageUrl(null);
   };
 
-  const handleMapPress = (event: any) => {
-    const { latitude, longitude } = event.nativeEvent.coordinate;
-    setSelectedLocation({ latitude, longitude });
-  };
-
   const submit = async () => {
     if (isPostDisabled) {
       const missing = getMissingFields();
@@ -295,14 +290,6 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     onClose();
   };
 
-  // Move the console log outside of the JSX to avoid interference
-  console.log('Rendering MapView with initial region:', {
-    latitude: 6.7955,
-    longitude: 79.9003,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  });
-
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
@@ -416,32 +403,44 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
             <TextInput placeholder="Description" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} style={[styles.inputMultiline, { color: colors.text, borderColor: colors.cardBorder }]} multiline numberOfLines={4} />
             <TextInput placeholder="Contact (WhatsApp)" placeholderTextColor={colors.textSecondary} value={contact} onChangeText={setContact} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
 
-            {/* Enhanced Map Section */}
-            <View style={styles.mapContainer}>
-              <MapView
-                provider={PROVIDER_GOOGLE} // Use Google Maps provider for better performance
-                style={styles.map}
-                initialRegion={{
-                  latitude: 6.7955,
-                  longitude: 79.9003,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                onPress={handleMapPress}
-                showsUserLocation={true} // Show user's current location
-                showsMyLocationButton={true} // Add a button to center on user's location
-                zoomEnabled={true} // Allow zooming
-                rotateEnabled={true} // Allow rotation
-              >
-                {selectedLocation && (
-                  <Marker
-                    coordinate={selectedLocation}
-                    draggable
-                    onDragEnd={handleMapPress}
-                    pinColor="blue" // Change marker color for better visibility
-                  />
-                )}
-              </MapView>
+            {/* Location Section (no Google Maps dependency) */}
+            <View style={[styles.mapFallback, { borderColor: colors.cardBorder, backgroundColor: colors.background, marginBottom: 16 }]}
+            >
+              <Text style={{ color: colors.text, marginBottom: 8, fontWeight: '600' }}>Set location</Text>
+              <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
+                Enter coordinates or use your current location. No map API key required.
+              </Text>
+              <View style={styles.manualRow}>
+                <TextInput
+                  style={[styles.manualInput, { borderColor: colors.cardBorder, color: colors.text }]}
+                  placeholder="Latitude"
+                  placeholderTextColor={colors.textSecondary}
+                  value={latInput}
+                  onChangeText={setLatInput}
+                  keyboardType="decimal-pad"
+                />
+                <TextInput
+                  style={[styles.manualInput, { borderColor: colors.cardBorder, color: colors.text }]}
+                  placeholder="Longitude"
+                  placeholderTextColor={colors.textSecondary}
+                  value={lngInput}
+                  onChangeText={setLngInput}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.manualActions}>
+                <TouchableOpacity style={[styles.manualButton, { borderColor: colors.cardBorder }]} onPress={handleManualLocationSave}>
+                  <Text style={{ color: colors.text }}>Save coords</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.manualButton, { borderColor: colors.cardBorder }]} onPress={handleUseCurrentLocation}>
+                  <Text style={{ color: colors.primary }}>Use my location</Text>
+                </TouchableOpacity>
+              </View>
+              {selectedLocation && (
+                <Text style={{ color: colors.textSecondary, marginTop: 6 }}>
+                  Selected: {selectedLocation.latitude.toFixed(5)}, {selectedLocation.longitude.toFixed(5)}
+                </Text>
+              )}
             </View>
           </ScrollView>
 
@@ -568,13 +567,34 @@ const styles = StyleSheet.create({
   inputMultiline: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10, minHeight: 80 },
   actionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   button: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
-  mapContainer: {
-    height: 250, // Increased height for better visibility
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  map: {
+  mapFallback: {
     flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  manualRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  manualInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  manualActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  manualButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
   },
 });
