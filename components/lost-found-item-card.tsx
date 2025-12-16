@@ -2,8 +2,8 @@ import { Colors } from '@/constants/theme';
 import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getPlaceNameFromLatLng, parseLatLng } from '@/services/geocode';
-import { openDirectionsTo } from '@/utils/maps';
 import { FontAwesome } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, ImageSourcePropType, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -44,6 +44,7 @@ export default function LostFoundItemCard({
   const [showFullDescription, setShowFullDescription] = useState(false);
   const { user } = useUser();
   const isOwner = Boolean(user && item.created_by && String(user.id) === String(item.created_by));
+  const router = useRouter();
 
   const handleWishlistToggle = async () => {
     try {
@@ -87,19 +88,17 @@ export default function LostFoundItemCard({
     return () => { mounted = false; };
   }, [item.location]);
 
-  const handleGetDirections = async () => {
-    if (isOwner) return;
-    const dest = parseLatLng(item.location);
-    if (!dest) {
-      Alert.alert('Location not available', 'This post does not have a valid location.');
+  const handleChatPress = () => {
+    if (!item.created_by) {
+      Alert.alert('Unavailable', 'Publisher information is missing for this post.');
       return;
     }
-
-    try {
-      await openDirectionsTo(dest.latitude, dest.longitude);
-    } catch (err) {
-      Alert.alert('Could not open maps', String((err as Error).message || 'Unable to open maps on this device.'));
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to chat with the publisher.');
+      return;
     }
+    if (String(user.id) === String(item.created_by)) return;
+    router.push({ pathname: '/chat/[otherUserId]', params: { otherUserId: String(item.created_by) } });
   };
 
   const getDisplayDescription = () => {
@@ -223,14 +222,14 @@ export default function LostFoundItemCard({
               <FontAwesome name="eye" size={14} color={colors.primary} style={styles.buttonIcon} />
               <Text style={[styles.shareButtonText, { color: colors.primary }]}>Details</Text>
             </TouchableOpacity>
-            {!isOwner && item.location && (
+            {!isOwner && (
               <TouchableOpacity
                 style={[styles.resolveButton, { borderColor: colors.cardBorder }]}
-                onPress={handleGetDirections}
+                onPress={handleChatPress}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="location-arrow" size={14} color={colors.primary} style={styles.buttonIcon} />
-                <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Directions</Text>
+                <FontAwesome name="comments" size={14} color={colors.primary} style={styles.buttonIcon} />
+                <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Chat</Text>
               </TouchableOpacity>
             )}
             

@@ -6,7 +6,6 @@ import { addLostFoundToWishlist, isLostFoundInWishlist, removeItemFromWishlist }
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -249,39 +248,17 @@ export default function LostFoundDetailsScreen() {
     }
   };
 
-  const parseLatLng = (loc?: string) => {
-    if (!loc) return null;
-    const parts = String(loc).split(',').map(s => s.trim());
-    if (parts.length < 2) return null;
-    const lat = Number(parts[0]);
-    const lng = Number(parts[1]);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return { latitude: lat, longitude: lng };
-    return null;
-  };
-
-  const handleGetDirections = async () => {
-    if (isOwner) return;
-    const dest = parseLatLng(item?.location);
-    if (!dest) {
-      Alert.alert('Location not available', 'This post does not have a valid location.');
+  const handleChatWithPublisher = () => {
+    if (!item?.created_by) {
+      Alert.alert('Unavailable', 'Publisher information is missing for this post.');
       return;
     }
-
-    // Open maps with destination only; device maps app will use current location as origin.
-    const destStr = `${dest.latitude},${dest.longitude}`;
-    const iosUrl = `http://maps.apple.com/?daddr=${destStr}`;
-    const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${destStr}&travelmode=driving`;
-    const url = (Platform.OS === 'ios') ? iosUrl : googleUrl;
-
-    try {
-      await Linking.openURL(url);
-    } catch (err) {
-      try {
-        await Linking.openURL(googleUrl);
-      } catch (e) {
-        Alert.alert('Could not open maps', 'Unable to open maps on this device.');
-      }
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to chat with the publisher.');
+      return;
     }
+    if (String(user.id) === String(item.created_by)) return;
+    router.push({ pathname: '/chat/[otherUserId]', params: { otherUserId: String(item.created_by) } });
   };
 
   const getImages = () => {
@@ -470,13 +447,13 @@ export default function LostFoundDetailsScreen() {
             <Text style={[styles.shareText, { color: colors.primary }]}>Share</Text>
           </TouchableOpacity>
 
-          {!isOwner && item.location && (
+          {!isOwner && (
             <TouchableOpacity
               style={[styles.resolveButton, { borderColor: colors.cardBorder }]}
-              onPress={handleGetDirections}
+              onPress={handleChatWithPublisher}
             >
-              <FontAwesome name="location-arrow" size={16} color={colors.primary} />
-              <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Directions</Text>
+              <FontAwesome name="comments" size={16} color={colors.primary} />
+              <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Chat</Text>
             </TouchableOpacity>
           )}
 

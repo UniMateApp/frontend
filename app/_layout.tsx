@@ -1,5 +1,6 @@
 // import App from '@/components/App';
 import AuthProvider from '@/components/AuthProvider';
+import MessageNotificationListener from '@/components/MessageNotificationListener';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { configureNotificationHandler, requestNotificationPermissions } from '@/services/backgroundScheduler';
 import { registerBackgroundTask } from '@/services/backgroundTaskService';
@@ -8,6 +9,7 @@ import * as Location from 'expo-location';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -64,8 +66,10 @@ export default function RootLayout() {
   }, []);
 
   return (
+    <SafeAreaProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthProvider>
+          <MessageNotificationListener />
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen 
@@ -76,9 +80,18 @@ export default function RootLayout() {
                 headerBackTitle: 'Back'
               }} 
             />
+            <Stack.Screen
+              name="chat/[otherUserId]"
+              options={{
+                title: 'Chat',
+                headerShown: true,
+                headerBackTitle: 'Back',
+              }}
+            />
           </Stack>
         </AuthProvider>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
