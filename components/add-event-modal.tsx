@@ -1,7 +1,8 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type Props = {
   visible: boolean;
@@ -16,11 +17,39 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Technology');
   const [organizer, setOrganizer] = useState('');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
+  const [date, setDate] = useState(new Date());
+  const [time, setTime] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('Free');
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (event.type === 'set' && selectedDate) {
+      setDate(selectedDate);
+    }
+  };
+
+  const onTimeChange = (event: any, selectedTime?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
+    if (event.type === 'set' && selectedTime) {
+      setTime(selectedTime);
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const formatTime = (time: Date) => {
+    return time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
 
   const submit = () => {
     if (!title.trim()) return;
@@ -29,8 +58,8 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
       title: title.trim(),
       category,
       organizer: organizer || 'Organizer',
-      date: date || new Date().toDateString(),
-      time,
+      date: formatDate(date),
+      time: formatTime(time),
       location: location || 'TBD',
       description,
       attendees: { registered: 0 },
@@ -44,8 +73,8 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
     setTitle('');
     setCategory('Technology');
     setOrganizer('');
-    setDate('');
-    setTime('');
+    setDate(new Date());
+    setTime(new Date());
     setLocation('');
     setDescription('');
     setPrice('Free');
@@ -62,8 +91,33 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
             <TextInput placeholder="Title" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Category" placeholderTextColor={colors.textSecondary} value={category} onChangeText={setCategory} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Organizer" placeholderTextColor={colors.textSecondary} value={organizer} onChangeText={setOrganizer} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
-            <TextInput placeholder="Date" placeholderTextColor={colors.textSecondary} value={date} onChangeText={setDate} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
-            <TextInput placeholder="Time" placeholderTextColor={colors.textSecondary} value={time} onChangeText={setTime} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
+            
+            <Text style={[styles.label, { color: colors.text }]}>Date</Text>
+            <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.input, styles.pickerButton, { borderColor: colors.cardBorder }]}>
+              <Text style={{ color: colors.text }}>{formatDate(date)}</Text>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onDateChange}
+              />
+            )}
+
+            <Text style={[styles.label, { color: colors.text }]}>Time</Text>
+            <TouchableOpacity onPress={() => setShowTimePicker(true)} style={[styles.input, styles.pickerButton, { borderColor: colors.cardBorder }]}>
+              <Text style={{ color: colors.text }}>{formatTime(time)}</Text>
+            </TouchableOpacity>
+            {showTimePicker && (
+              <DateTimePicker
+                value={time}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onTimeChange}
+              />
+            )}
+
             <TextInput placeholder="Location" placeholderTextColor={colors.textSecondary} value={location} onChangeText={setLocation} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Price (Free/Paid)" placeholderTextColor={colors.textSecondary} value={price} onChangeText={setPrice} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Short description" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} style={[styles.inputMultiline, { color: colors.text, borderColor: colors.cardBorder }]} multiline numberOfLines={3} />
@@ -88,8 +142,10 @@ const styles = StyleSheet.create({
   sheet: { maxHeight: '85%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1 },
   content: { padding: 16 },
   heading: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 4 },
   input: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
   inputMultiline: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10, minHeight: 80 },
+  pickerButton: { justifyContent: 'center' },
   actionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   button: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
 });
