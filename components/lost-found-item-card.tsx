@@ -1,7 +1,10 @@
 import { Colors } from '@/constants/theme';
+import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getPlaceNameFromLatLng, parseLatLng } from '@/services/geocode';
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { Alert, Image, ImageSourcePropType, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface LostFoundItemProps {
@@ -21,7 +24,6 @@ interface LostFoundItemProps {
     is_resolved?: boolean;
   };
   onResolve: (id: string) => void;
-  onDelete: (id: string) => void;
   onWishlistToggle: (id: string, isInWishlist: boolean) => Promise<void>;
   onPress?: () => void; // For opening detailed view
   isInWishlist: boolean;
@@ -33,7 +35,6 @@ const DEFAULT_LOST_FOUND_IMAGE = require('@/assets/images/icon.png');
 export default function LostFoundItemCard({
   item,
   onResolve,
-  onDelete,
   onWishlistToggle,
   onPress,
   isInWishlist,
@@ -41,6 +42,9 @@ export default function LostFoundItemCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [showFullDescription, setShowFullDescription] = useState(false);
+  const { user } = useUser();
+  const isOwner = Boolean(user && item.created_by && String(user.id) === String(item.created_by));
+  const router = useRouter();
 
   const handleWishlistToggle = async () => {
     try {
@@ -62,6 +66,39 @@ export default function LostFoundItemCard({
     }
     // Use default icon image for all cases
     return DEFAULT_LOST_FOUND_IMAGE;
+  };
+
+  const [placeName, setPlaceName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const coords = parseLatLng(item.location);
+    if (!coords) return;
+
+    (async () => {
+      try {
+        const name = await getPlaceNameFromLatLng(coords.latitude, coords.longitude);
+        if (mounted) setPlaceName(name);
+      } catch (err) {
+        console.warn('geocode: failed to resolve place name', err);
+        if (mounted) setPlaceName(null);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [item.location]);
+
+  const handleChatPress = () => {
+    if (!item.created_by) {
+      Alert.alert('Unavailable', 'Publisher information is missing for this post.');
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to chat with the publisher.');
+      return;
+    }
+    if (String(user.id) === String(item.created_by)) return;
+    router.push({ pathname: '/chat/[otherUserId]', params: { otherUserId: String(item.created_by) } });
   };
 
   const getDisplayDescription = () => {
@@ -152,7 +189,7 @@ export default function LostFoundItemCard({
               <View style={styles.metaItem}>
                 <FontAwesome name="map-marker" size={12} color={colors.icon} />
                 <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                  {item.location}
+                  {placeName ? `near ${placeName}` : item.location}
                 </Text>
               </View>
             )}
@@ -169,12 +206,12 @@ export default function LostFoundItemCard({
           )}
 
           {/* Status indicator */}
-          {item.is_resolved && (
+          {/* {item.is_resolved && (
             <View style={styles.resolvedBanner}>
               <FontAwesome name="check-circle" size={16} color="#5cb85c" />
               <Text style={[styles.resolvedText, { color: '#5cb85c' }]}>Resolved</Text>
             </View>
-          )}
+          )} */}
 
           {/* Action buttons */}
           <View style={styles.actionsRow}>
@@ -185,29 +222,33 @@ export default function LostFoundItemCard({
               <FontAwesome name="eye" size={14} color={colors.primary} style={styles.buttonIcon} />
               <Text style={[styles.shareButtonText, { color: colors.primary }]}>Details</Text>
             </TouchableOpacity>
-            
-            {!item.is_resolved && (
-              <TouchableOpacity 
-                style={[styles.resolveButton, { borderColor: colors.primary }]} 
-                onPress={() => onResolve(item.id)}
-                activeOpacity={0.8}>
-                <FontAwesome name="check" size={14} color={colors.primary} style={styles.buttonIcon} />
-                <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Resolve</Text>
+            {!isOwner && (
+              <TouchableOpacity
+                style={[styles.resolveButton, { borderColor: colors.cardBorder }]}
+                onPress={handleChatPress}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="comments" size={14} color={colors.primary} style={styles.buttonIcon} />
+                <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Chat</Text>
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity 
-              style={[styles.deleteButton, { borderColor: '#e74c3c' }]} 
-              onPress={() =>
-                Alert.alert('Delete Item', 'Are you sure you want to delete this item?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete', style: 'destructive', onPress: () => onDelete(item.id) },
-                ])
-              }
-              activeOpacity={0.8}>
-              <FontAwesome name="trash-o" size={14} color="#e74c3c" style={styles.buttonIcon} />
-              <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Delete</Text>
-            </TouchableOpacity>
+              {/* Single-delete button: visually Delete but marks item as resolved in DB */}
+              {/* Only the creator of the post may mark it resolved. Hide the button for others. */}
+              {!item.is_resolved && isOwner && (
+                <TouchableOpacity
+                  style={[styles.deleteButton, { borderColor: '#e74c3c' }]}
+                  onPress={() =>
+                    Alert.alert('Mark as Resolved', 'This will mark the item as resolved (it will be hidden). Continue?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Mark Resolved', style: 'destructive', onPress: () => onResolve(item.id) },
+                    ])
+                  }
+                  activeOpacity={0.8}>
+                  <FontAwesome name="trash-o" size={14} color="#e74c3c" style={styles.buttonIcon} />
+                  <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Mark Resolved</Text>
+                </TouchableOpacity>
+              )}
           </View>
         </View>
       </TouchableOpacity>

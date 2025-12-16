@@ -321,10 +321,11 @@ export async function getLostFoundWithWishlistStatus(): Promise<(MappedLostFound
     const client = await getSupabase();
     const { data: { user } } = await client.auth.getUser();
     
-    // Get all lost-and-found items
+    // Get all *unresolved* lost-and-found items
     const { data: lostFoundItems, error: lostFoundError } = await client
       .from('lost_found')
       .select('*')
+      .eq('resolved', false)
       .order('created_at', { ascending: false });
 
     if (lostFoundError) {

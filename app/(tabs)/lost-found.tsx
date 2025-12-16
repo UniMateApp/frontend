@@ -1,4 +1,5 @@
 import { SearchBar } from '@/components/search-bar';
+import { useUser } from '@/contexts/UserContext';
 import { supabase } from '@/services/supabase';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -7,7 +8,7 @@ import LostFoundItemCard from '../../components/lost-found-item-card';
 import LostFoundModal from '../../components/lost-found-modal';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
-import { createLostFound, deleteLostFound, resolveLostFound } from '../../services/lostFound';
+import { createLostFound, resolveLostFoundItem } from '../../services/lostFound';
 import {
   addLostFoundToWishlist,
   getLostFoundWithWishlistStatus,
@@ -33,9 +34,12 @@ export default function LostFoundScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+
+  const { user } = useUser();
 
   const open = () => setModalVisible(true);
   const close = () => setModalVisible(false);
@@ -86,11 +90,13 @@ export default function LostFoundScreen() {
   const handleAdd = async (post: any) => {
     try {
       const created = await createLostFound({
-        type: post.type.toLowerCase(), // Use 'type' instead of 'kind'
-        item_name: post.title, // Use 'item_name' to match the interface
+        kind: post.type.toLowerCase(), // Database uses 'kind' field
+        title: post.title, // Database uses 'title' field
         description: post.description,
-        contact_info: post.contact, // Use 'contact_info' to match the interface
-        is_resolved: false, // Use 'is_resolved' to match the interface
+        contact: post.contact, // Database uses 'contact' field
+        image_url: post.image_url, // Image URL from Supabase Storage
+        resolved: false, // Database uses 'resolved' field
+        location: post.location, // Location as string
       });
       setPosts(prev => [created, ...prev]);
       Alert.alert('Success', 'Post added successfully!');
@@ -105,23 +111,14 @@ export default function LostFoundScreen() {
   /** Resolve post */
   const handleResolve = async (id: string) => {
     try {
-      await resolveLostFound(parseInt(id));
+      await resolveLostFoundItem(String(id));
       setPosts(prev => prev.map(p => (p.id === id ? { ...p, is_resolved: true } : p)));
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Could not mark as resolved');
     }
   };
 
-  /** Delete post */
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteLostFound(parseInt(id));
-      setPosts(prev => prev.filter(p => p.id !== id));
-      Alert.alert('Deleted', 'Post deleted successfully!');
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not delete post');
-    }
-  };
+  // Deletion handled via onResolve (mark resolved); no separate delete handler
 
   /** Toggle wishlist for lost-found item */
   const handleWishlistToggle = async (id: string, isInWishlist: boolean) => {
@@ -149,7 +146,14 @@ export default function LostFoundScreen() {
     router.push({ pathname: '/lost-found/[id]', params: { id } });
   };
 
-  const data = useMemo(() => posts, [posts]);
+  // Only show posts that are not resolved so "deleted" (resolved) items are hidden
+  const data = useMemo(() => {
+    const base = posts.filter(p => !p.is_resolved);
+    if (filterMode === 'mine' && user?.id) {
+      return base.filter(p => String(p.created_by) === String(user.id));
+    }
+    return base;
+  }, [posts, filterMode, user]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -157,9 +161,26 @@ export default function LostFoundScreen() {
 
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: colors.text }]}>Lost & Found</Text>
-        <TouchableOpacity onPress={open} style={[styles.addButton, { borderColor: colors.cardBorder }]}>
-          <Text style={{ color: colors.primary, fontWeight: '700' }}>+ Add Post</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.segmentedWrapper}>
+            <TouchableOpacity
+              onPress={() => setFilterMode('all')}
+              style={[styles.segmentButton, filterMode === 'all' ? { backgroundColor: colors.primary } : { borderColor: colors.cardBorder }]}
+            >
+              <Text style={{ color: filterMode === 'all' ? '#fff' : colors.primary, fontWeight: '700' }}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setFilterMode('mine')}
+              disabled={!user}
+              style={[styles.segmentButton, filterMode === 'mine' ? { backgroundColor: colors.primary } : { borderColor: colors.cardBorder }, !user ? { opacity: 0.5 } : null]}
+            >
+              <Text style={{ color: filterMode === 'mine' ? '#fff' : colors.primary, fontWeight: '700' }}>My Posts</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={open} style={[styles.addButton, { borderColor: colors.cardBorder, marginLeft: 8 }]}>
+            <Text style={{ color: colors.primary, fontWeight: '700' }}>+ Add Post</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading && <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />}
@@ -171,8 +192,7 @@ export default function LostFoundScreen() {
           <LostFoundItemCard 
             item={item} 
             isInWishlist={item.isInWishlist || false}
-            onResolve={handleResolve} 
-            onDelete={handleDelete}
+            onResolve={handleResolve}
             onWishlistToggle={handleWishlistToggle}
             onPress={() => handleItemPress(String(item.id))}
           />
@@ -201,6 +221,9 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: '700' },
   addButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  myPostsButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  segmentedWrapper: { flexDirection: 'row', borderRadius: 8, overflow: 'hidden', borderWidth: 1 },
+  segmentButton: { paddingVertical: 8, paddingHorizontal: 12 },
   empty: { padding: 24, alignItems: 'center' },
   card: { marginHorizontal: 16, marginVertical: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

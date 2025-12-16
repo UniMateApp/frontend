@@ -7,7 +7,12 @@ import React, { useEffect, useState } from 'react'
 import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 // Keep Supabase session refresh commented — kept for reference.
-  // ✅ Move AppState listener inside useEffect
+
+export default function Auth() {
+  const colorScheme = useColorScheme()
+  const theme = Colors[colorScheme ?? 'light']
+
+  // Move AppState listener inside component to avoid invalid hook call
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async () => {
       // noop; client-side refresh is handled elsewhere
@@ -15,10 +20,6 @@ import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } fr
 
     return () => subscription.remove()
   }, [])
-
-export default function Auth() {
-  const colorScheme = useColorScheme()
-  const theme = Colors[colorScheme ?? 'light']
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
