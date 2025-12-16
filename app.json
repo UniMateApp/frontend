@@ -36,7 +36,12 @@
         "VIBRATE",
         "WAKE_LOCK"
       ],
-      "package": "com.anonymous.unimate"
+      "package": "com.anonymous.unimate",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBTnK569rlHLuD2qGcFpu2DWAvBcl7FImo"
+        }
+      }
     },
     "web": {
       "output": "static",
