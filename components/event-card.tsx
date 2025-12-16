@@ -22,6 +22,7 @@ interface EventCardProps {
   onBookmark: () => void;
   onRsvp?: () => void;
   onShare?: () => void;
+  onLongPress?: () => void;
   isBookmarked?: boolean;
 }
 
@@ -42,6 +43,7 @@ export function EventCard({
   onBookmark,
   onRsvp,
   onShare,
+  onLongPress,
   isBookmarked,
 }: EventCardProps) {
   const colorScheme = useColorScheme();
@@ -70,18 +72,15 @@ export function EventCard({
         },
       ]}
     >
-      <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
+      <TouchableOpacity activeOpacity={0.95} onPress={onPress} onLongPress={onLongPress}>
         {source && (
-          <View>
+          <View style={styles.imageContainer}>
             <Image source={source} style={styles.image} resizeMode="cover" />
             {category && (
               <View style={[styles.categoryBadge, { backgroundColor: colors.background }]}> 
                 <Text style={[styles.categoryText, { color: colors.primary }]}>{category}</Text>
               </View>
             )}
-            <TouchableOpacity onPress={onBookmark} style={[styles.bookmarkOverlay, { backgroundColor: colors.card }]} accessibilityLabel={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}>
-              <FontAwesome name={isBookmarked ? 'bookmark' : 'bookmark-o'} size={16} color={isBookmarked ? colors.primary : colors.icon} />
-            </TouchableOpacity>
           </View>
         )}
 
@@ -90,11 +89,32 @@ export function EventCard({
             <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
               {title}
             </Text>
-            {price && (
-              <View style={[styles.pricePill, { borderColor: colors.cardBorder }]}>
-                <Text style={[styles.priceText, { color: colors.text }]}>{price}</Text>
-              </View>
-            )}
+            <View style={styles.headerActions}>
+              {/* Heart icon for wishlist */}
+              <TouchableOpacity 
+                onPress={onBookmark} 
+                style={[
+                  styles.heartButton, 
+                  { 
+                    backgroundColor: isBookmarked ? colors.primary : 'transparent',
+                  }
+                ]} 
+                accessibilityLabel={isBookmarked ? 'Remove from wishlist' : 'Add to wishlist'}
+                activeOpacity={0.8}
+              >
+                <FontAwesome 
+                  name={isBookmarked ? 'heart' : 'heart-o'} 
+                  size={20} 
+                  color={isBookmarked ? '#fff' : colors.primary} 
+                />
+              </TouchableOpacity>
+              
+              {price && (
+                <View style={[styles.pricePill, { borderColor: colors.cardBorder }]}>
+                  <Text style={[styles.priceText, { color: colors.text }]}>{price}</Text>
+                </View>
+              )}
+            </View>
           </View>
 
           <Text style={[styles.organizer, { color: colors.textSecondary }]}>{organizer}</Text>
@@ -127,8 +147,13 @@ export function EventCard({
               <Text style={styles.rsvpText}>RSVP</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.shareButton} onPress={onShare}>
-              <FontAwesome name="share" size={16} color={colors.icon} />
+            <TouchableOpacity 
+              style={[styles.shareButton, { borderColor: colors.cardBorder, backgroundColor: colors.card }]} 
+              onPress={onShare}
+              activeOpacity={0.7}
+            >
+              <FontAwesome name="share-alt" size={18} color={colors.primary} />
+              <Text style={[styles.shareText, { color: colors.primary }]}>Share</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -148,6 +173,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  imageContainer: {
+    position: 'relative',
+  },
   image: {
     height: 200,
     width: '100%',
@@ -165,6 +193,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     marginRight: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heartButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   bookmarkButton: {
     padding: 4,
@@ -198,17 +242,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  bookmarkOverlay: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 3,
-  },
+
   pricePill: {
     borderWidth: 1,
     paddingHorizontal: 8,
@@ -263,7 +297,16 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     marginLeft: 12,
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  shareText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

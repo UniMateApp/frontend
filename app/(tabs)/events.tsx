@@ -1,26 +1,36 @@
 import AddEventModal from '@/components/add-event-modal';
 import { EventCard } from '@/components/event-card';
 import { SearchBar } from '@/components/search-bar';
-import { sampleEvents } from '@/constants/sample-events';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
+import {
+  Event,
+  addEventToWishlist,
+  getEventsWithWishlistStatus,
+  removeItemFromWishlist,
+} from '@/services/selectiveWishlist';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EventsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [query, setQuery] = useState('');
-  const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({});
-  const [eventsState, setEventsState] = useState(sampleEvents);
+  const [eventsWithWishlist, setEventsWithWishlist] = useState<(Event & { isInWishlist: boolean })[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const hasFocusedOnce = useRef(false);
 
   const events = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return eventsState;
-    return eventsState.filter(e => (e.title + ' ' + e.organizer + ' ' + e.location).toLowerCase().includes(q));
-  }, [query, eventsState]);
+    if (!q) return eventsWithWishlist;
+    return eventsWithWishlist.filter((e: Event & { isInWishlist: boolean }) => 
+      (e.title + ' ' + (e.organizer || '') + ' ' + (e.location || '')).toLowerCase().includes(q)
+    );
+  }, [query, eventsWithWishlist]);
 
   const handleSearch = (text: string) => {
     setQuery(text);
@@ -30,13 +40,211 @@ export default function EventsScreen() {
     router.push({ pathname: '/event/[id]', params: { id: eventId } });
   };
 
-  const handleBookmark = (eventId: string) => {
-    setBookmarks(prev => ({ ...prev, [eventId]: !prev[eventId] }));
+  const handleWishlistToggle = async (eventId: string, isCurrentlyInWishlist: boolean) => {
+    try {
+      if (isCurrentlyInWishlist) {
+        await removeItemFromWishlist('event', eventId);
+      } else {
+        await addEventToWishlist(eventId);
+      }
+      
+      // Update local state immediately
+      setEventsWithWishlist(prev => 
+        prev.map(event => 
+          event.id === eventId 
+            ? { ...event, isInWishlist: !isCurrentlyInWishlist }
+            : event
+        )
+      );
+    } catch (error: any) {
+      console.error('Error toggling wishlist:', error);
+      const isWeb = typeof window !== 'undefined' && (window as any).document != null;
+      if (isWeb) {
+        window.alert(error.message || 'Failed to update wishlist');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to update wishlist');
+      }
+    }
   };
 
-  const handleAddEvent = (ev: any) => {
-    setEventsState(prev => [ev, ...prev]);
+  const handleShare = async (event: Event & { isInWishlist: boolean }) => {
+    try {
+      const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'TBD';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      };
+
+      const formatTime = (dateStr: string) => {
+        if (!dateStr) return 'TBD';
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      };
+
+      const shareContent = {
+        title: event.title || 'Check out this event!',
+        message: `🎉 ${event.title || 'Event'} by ${event.organizer || 'Unknown'}\n\n${event.description || 'Join us for an exciting event!'}\n\n📅 Date: ${formatDate(event.start_at || '')}\n⏰ Time: ${formatTime(event.start_at || '')}\n📍 Location: ${event.location || 'TBD'}\n\n#UniMateEvent`,
+        url: Platform.OS === 'web' ? window.location.href : undefined,
+      };
+
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share(shareContent);
+        } else {
+          // Fallback for web browsers without native share
+          await navigator.clipboard.writeText(shareContent.message);
+          window.alert('Event details copied to clipboard!');
+        }
+      } else {
+        await Share.share(shareContent);
+      }
+    } catch (error: any) {
+      console.error('Error sharing:', error);
+      if (error.name !== 'AbortError') { // User cancelled sharing
+        const message = 'Failed to share event';
+        if (Platform.OS === 'web') {
+          window.alert(`Error: ${message}`);
+        } else {
+          Alert.alert('Error', message);
+        }
+      }
+    }
   };
+
+  const handleRSVP = (event: Event & { isInWishlist: boolean }) => {
+    if (Platform.OS === 'web') {
+      window.alert(`RSVP for "${event.title}" - Feature coming soon!`);
+    } else {
+      Alert.alert('RSVP', `RSVP for "${event.title}" - Feature coming soon!`);
+    }
+  };
+
+  const handleDeleteEvent = (eventId: string, eventTitle: string) => {
+    Alert.alert(
+      'Delete Event',
+      `Are you sure you want to delete "${eventTitle}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiDeleteEvent(eventId);
+              Alert.alert('Success', 'Event deleted successfully!');
+              // Remove from local state immediately for better UX
+              setEventsWithWishlist(prev => prev.filter(e => e.id !== eventId));
+              // Also refresh from server to ensure consistency
+              await loadEvents();
+            } catch (err: any) {
+              console.error('Failed to delete event:', err);
+              Alert.alert('Error', err?.message || 'Failed to delete event');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const loadEvents = useCallback(
+    async ({ showLoader = false, shouldUpdate }: { showLoader?: boolean; shouldUpdate?: () => boolean } = {}) => {
+      if (showLoader) {
+        setLoading(true);
+        setError(null);
+      }
+
+      try {
+        const eventsWithWishlistStatus = await getEventsWithWishlistStatus();
+        if (!shouldUpdate || shouldUpdate()) {
+          setEventsWithWishlist(eventsWithWishlistStatus);
+        }
+      } catch (err: any) {
+        if (!shouldUpdate || shouldUpdate()) {
+          if (showLoader) {
+            console.error('Failed to load events with wishlist status', err);
+            setError(err?.message || String(err));
+            // Fallback to basic events without wishlist status
+            try {
+              const basicEvents = await apiListEvents();
+              if (Array.isArray(basicEvents)) {
+                setEventsWithWishlist(basicEvents.map(event => ({ ...event, isInWishlist: false })));
+              }
+            } catch (fallbackErr) {
+              console.error('Fallback also failed', fallbackErr);
+            }
+          } else {
+            console.warn('Reload failed', err);
+          }
+        }
+      } finally {
+        if (showLoader && (!shouldUpdate || shouldUpdate())) {
+          setLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+
+  const handleAddEvent = (ev: any) => {
+    (async () => {
+      try {
+        // Convert price to number: "Free" -> 0, parse numeric strings, default to null
+        let priceValue: number | null = null;
+        if (ev.price) {
+          const lower = String(ev.price).toLowerCase().trim();
+          if (lower === 'free' || lower === 'free admission') {
+            priceValue = 0;
+          } else {
+            const parsed = parseFloat(String(ev.price));
+            priceValue = isNaN(parsed) ? null : parsed;
+          }
+        }
+
+        const created = await apiCreateEvent({
+          title: ev.title,
+          description: ev.description,
+          category: ev.category,
+          organizer: ev.organizer,
+          start_at: ev.date,
+          location: ev.location,
+          price: priceValue,
+          image_url: typeof ev.image === 'string' ? ev.image : null,
+        });
+
+        if (created) {
+          alert('Event added successfully! ID = ' + created.id);
+          await loadEvents(); // Fetch the latest events from DB
+        } else {
+          console.warn('API did not return the created event object.');
+          alert('Event added locally, but API did not return a record.');
+        }
+      } catch (err: any) {
+        console.error('Create event failed:', err);
+        alert('Failed to add event: ' + (err?.message || String(err)));
+      }
+    })();
+  };
+
+  // Fetch events from Supabase on mount
+  useEffect(() => {
+    let active = true;
+    loadEvents({ showLoader: true, shouldUpdate: () => active });
+    return () => {
+      active = false;
+    };
+  }, [loadEvents]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
+
+      void loadEvents();
+    }, [loadEvents])
+  );
 
   return (
     <ScrollView
@@ -45,7 +253,7 @@ export default function EventsScreen() {
       <View style={styles.headerRow}>
         <View>
           <Text style={[styles.title, { color: colors.text }]}>Events</Text>
-          <Text style={{ color: colors.textSecondary }}>{eventsState.length} events available</Text>
+          <Text style={{ color: colors.textSecondary }}>{eventsWithWishlist.length} events available</Text>
         </View>
 
         <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={() => setShowAdd(true)}>
@@ -55,17 +263,31 @@ export default function EventsScreen() {
 
       <SearchBar onSearch={handleSearch} />
 
-      {events.map(e => (
+      {events.map((e: Event & { isInWishlist: boolean }) => (
         <EventCard
           key={e.id}
           title={e.title}
-          organizer={e.organizer}
-          date={e.date}
-          location={e.location}
-          imageUrl={e.image}
+          organizer={e.organizer || 'Unknown Organizer'}
+          date={e.start_at ? new Date(e.start_at).toLocaleDateString() : 'Date TBD'}
+          location={e.location || 'Location TBD'}
+          imageUrl={e.image_url}
           onPress={() => handleEventPress(e.id)}
-          onBookmark={() => handleBookmark(e.id)}
-          isBookmarked={!!bookmarks[e.id]}
+          onBookmark={() => handleWishlistToggle(e.id, e.isInWishlist)}
+          isBookmarked={e.isInWishlist}
+          onShare={() => handleShare(e)}
+          onRsvp={() => handleRSVP(e)}
+          onLongPress={() => {
+            Alert.alert(
+              'Event Actions',
+              `What would you like to do with "${e.title}"?`,
+              [
+                { text: 'View Details', onPress: () => handleEventPress(e.id) },
+                { text: 'Share Event', onPress: () => handleShare(e) },
+                { text: 'Delete Event', style: 'destructive', onPress: () => handleDeleteEvent(e.id, e.title) },
+                { text: 'Cancel', style: 'cancel' },
+              ]
+            );
+          }}
         />
       ))}
 
