@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getCurrentUser } from '@/services/auth';
 import { LOCATION_PREFIX, fetchMessages, findOrCreateConversation, markMessagesRead, sendLocationMessage, sendMessage, subscribeToMessages, type Message } from '@/services/chat';
 import { getProfile } from '@/services/profiles';
 import { FontAwesome } from '@expo/vector-icons';
@@ -26,6 +27,8 @@ export default function ChatWithUserScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [otherUserName, setOtherUserName] = useState('');
+  const [otherUserEmail, setOtherUserEmail] = useState('');
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
   const unsubscribeRef = useRef<(() => Promise<void>) | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
 
@@ -42,8 +45,14 @@ export default function ChatWithUserScreen() {
         const profile = await getProfile(String(otherUserId));
         const fallback = `User ${String(otherUserId).slice(0, 6)}`;
         const name = profile?.full_name || fallback;
+        const email = profile?.email || '';
+        
         setOtherUserName(name);
-        navigation.setOptions({ title: name });
+        setOtherUserEmail(email);
+        
+        // Use email as title if available, otherwise use name
+        const displayTitle = email || name;
+        navigation.setOptions({ title: displayTitle });
       } catch {
         const fallback = `User ${String(otherUserId).slice(0, 6)}`;
         setOtherUserName(fallback);
@@ -53,6 +62,10 @@ export default function ChatWithUserScreen() {
   }, [navigation, otherUserId]);
 
   useEffect(() => {
+    (async () => {
+      const authUser = await getCurrentUser();
+      setCurrentUserEmail(authUser?.email || '');
+    })();
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current().catch(() => {});
@@ -84,15 +97,20 @@ export default function ChatWithUserScreen() {
         if (unsubscribeRef.current) {
           await unsubscribeRef.current();
         }
+        console.log('[Chat] Setting up real-time subscription for conversation:', convo.id);
         unsubscribeRef.current = subscribeToMessages(
           convo.id,
           msg => {
+            console.log('[Chat] New message in UI:', msg.id);
             setMessages(prev => [...prev, msg]);
             if (msg.sender_id !== user!.id) {
               markMessagesRead(convo.id, String(user!.id)).catch(() => {});
             }
           },
-          msg => setMessages(prev => prev.map(m => (m.id === msg.id ? msg : m))),
+          msg => {
+            console.log('[Chat] Message updated in UI:', msg.id);
+            setMessages(prev => prev.map(m => (m.id === msg.id ? msg : m)));
+          },
         );
       } catch (err: any) {
         console.error('Chat load failed', err);
@@ -142,20 +160,38 @@ export default function ChatWithUserScreen() {
 
   const handleSendLocation = async () => {
     if (!conversationId || !user?.id) return;
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Location permission is required to share your location.');
-        return;
-      }
-      const coords = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      await sendLocationMessage(conversationId, String(user.id), {
-        latitude: coords.coords.latitude,
-        longitude: coords.coords.longitude,
-      });
-    } catch (err: any) {
-      Alert.alert('Location failed', err?.message || 'Could not share location');
-    }
+    
+    // Show confirmation dialog before sending location
+    Alert.alert(
+      'Share Location',
+      'Are you sure you want to share your current location with this user?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Share',
+          onPress: async () => {
+            try {
+              const { status } = await Location.requestForegroundPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Location permission is required to share your location.');
+                return;
+              }
+              const coords = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+              await sendLocationMessage(conversationId, String(user.id), {
+                latitude: coords.coords.latitude,
+                longitude: coords.coords.longitude,
+              });
+            } catch (err: any) {
+              Alert.alert('Location failed', err?.message || 'Could not share location');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const parseLocation = (content: string) => {
@@ -198,27 +234,36 @@ export default function ChatWithUserScreen() {
   }
 
   const renderItem = ({ item }: { item: Message }) => {
-    const timestampColor = item.sender_id === user.id ? 'rgba(255,255,255,0.8)' : colors.textSecondary;
+    const isCurrentUser = item.sender_id === user.id;
+    const timestampColor = isCurrentUser ? 'rgba(255,255,255,0.8)' : colors.textSecondary;
+    const senderEmail = isCurrentUser ? currentUserEmail : otherUserEmail;
     const loc = parseLocation(item.content);
+    
     return (
       <View
         style={[
           styles.bubble,
-          item.sender_id === user.id ? styles.bubbleRight : styles.bubbleLeft,
-          item.sender_id === user.id ? { backgroundColor: colors.primary } : { backgroundColor: colors.card },
+          isCurrentUser ? styles.bubbleRight : styles.bubbleLeft,
+          isCurrentUser ? { backgroundColor: colors.primary } : { backgroundColor: colors.card },
         ]}
       >
+        {/* Sender email identification */}
+        {senderEmail && (
+          <Text style={[styles.senderEmail, { color: isCurrentUser ? 'rgba(255,255,255,0.85)' : colors.textSecondary }]}>
+            {senderEmail}
+          </Text>
+        )}
         {loc ? (
           <TouchableOpacity onPress={() => openLocation(loc.latitude, loc.longitude)}>
-            <Text style={{ color: item.sender_id === user.id ? '#fff' : colors.primary, fontWeight: '700' }}>
+            <Text style={{ color: isCurrentUser ? '#fff' : colors.primary, fontWeight: '700' }}>
               Shared location
             </Text>
-            <Text style={{ color: item.sender_id === user.id ? '#fff' : colors.textSecondary }}>
+            <Text style={{ color: isCurrentUser ? '#fff' : colors.textSecondary }}>
               {loc.latitude.toFixed(5)}, {loc.longitude.toFixed(5)}
             </Text>
           </TouchableOpacity>
         ) : (
-          <Text style={{ color: item.sender_id === user.id ? '#fff' : colors.text }}>{item.content}</Text>
+          <Text style={{ color: isCurrentUser ? '#fff' : colors.text }}>{item.content}</Text>
         )}
         <Text style={[styles.timestamp, { color: timestampColor }]}>
           {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -228,16 +273,16 @@ export default function ChatWithUserScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['bottom', 'left', 'right', 'top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={{ flex: 1, backgroundColor: colors.background }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
       >
         <View style={[styles.headerRow, { borderBottomColor: colors.cardBorder }]}>        
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>
-              {otherUserName || `User ${String(otherUserId).slice(0, 6)}`}
+              {otherUserEmail || otherUserName || `User ${String(otherUserId).slice(0, 6)}`}
             </Text>
             {hasUnread && <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />}
           </View>
@@ -248,10 +293,16 @@ export default function ChatWithUserScreen() {
           data={messages}
           keyExtractor={m => m.id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 24 + insets.bottom }}
+          contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 24 }}
         />
 
-        <View style={[styles.inputRow, { borderTopColor: colors.cardBorder, paddingBottom: (insets.bottom || 12) }]}>
+        <View style={[styles.inputRow, { 
+          borderTopColor: colors.cardBorder, 
+          paddingBottom: Math.max(insets.bottom, 8) + 16,
+          paddingLeft: insets.left || 10,
+          paddingRight: insets.right || 10,
+          marginBottom: 0,
+        }]}>
           <TouchableOpacity
             style={[styles.iconButton, { borderColor: colors.cardBorder }]}
             onPress={handleSendLocation}
@@ -290,6 +341,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '80%', padding: 10, borderRadius: 12 },
   bubbleLeft: { alignSelf: 'flex-start', borderTopLeftRadius: 4 },
   bubbleRight: { alignSelf: 'flex-end', borderTopRightRadius: 4 },
+  senderEmail: { fontSize: 11, fontWeight: '600', marginBottom: 4, opacity: 0.9 },
   timestamp: { fontSize: 10, opacity: 0.7, marginTop: 4, textAlign: 'right', color: '#f5f5f5' },
   headerRow: {
     paddingHorizontal: 16,

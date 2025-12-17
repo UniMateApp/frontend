@@ -54,13 +54,14 @@ export async function ensureUserProfile(user: any) {
     const client = await getSupabase();
     console.log('Ensuring profile for user:', user?.id, 'with metadata:', user?.user_metadata);
     
-    // Use upsert to create or update profile with user metadata
+    // Use upsert to create or update profile with user metadata and email
     const { data, error: upsertError } = await client
       .from('profiles')
       .upsert({
         id: user.id,
         full_name: user.user_metadata?.full_name || null,
         avatar_url: user.user_metadata?.avatar_url || null,
+        email: user.email || null,
       })
       .select();
     

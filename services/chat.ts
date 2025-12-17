@@ -121,25 +121,44 @@ export function subscribeToMessages(
 ) {
   const channelPromise = (async () => {
     const client = await getSupabase();
-    return client
+    const channel = client
       .channel(`messages:${conversationId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
-        payload => onInsert(payload.new as Message),
+        payload => {
+          console.log('[RT] New message received:', payload.new);
+          onInsert(payload.new as Message);
+        },
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
-        payload => onUpdate?.(payload.new as Message),
+        payload => {
+          console.log('[RT] Message updated:', payload.new);
+          onUpdate?.(payload.new as Message);
+        },
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[RT] Successfully subscribed to messages for conversation:', conversationId);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[RT] Channel error:', err);
+        } else if (status === 'TIMED_OUT') {
+          console.error('[RT] Subscription timed out');
+        } else {
+          console.log('[RT] Subscription status:', status);
+        }
+      });
+    
+    return channel;
   })();
 
   return async () => {
     const channel = await channelPromise;
     const client = await getSupabase();
-    client.removeChannel(channel);
+    console.log('[RT] Unsubscribing from conversation:', conversationId);
+    await client.removeChannel(channel);
   };
 }
 
@@ -150,19 +169,35 @@ export function subscribeToIncomingMessages(
 ) {
   const channelPromise = (async () => {
     const client = await getSupabase();
-    return client
+    const channel = client
       .channel(`messages:incoming:${currentUserId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=neq.${currentUserId}` },
-        payload => onInsert(payload.new as Message),
+        payload => {
+          console.log('[RT] Incoming message received:', payload.new);
+          onInsert(payload.new as Message);
+        },
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[RT] Successfully subscribed to incoming messages for user:', currentUserId);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[RT] Channel error:', err);
+        } else if (status === 'TIMED_OUT') {
+          console.error('[RT] Subscription timed out');
+        } else {
+          console.log('[RT] Subscription status:', status);
+        }
+      });
+    
+    return channel;
   })();
 
   return async () => {
     const channel = await channelPromise;
     const client = await getSupabase();
-    client.removeChannel(channel);
+    console.log('[RT] Unsubscribing from incoming messages');
+    await client.removeChannel(channel);
   };
 }
