@@ -140,7 +140,6 @@ export default function LostFoundDetailsScreen() {
         const wishlistStatus = await isLostFoundInWishlist(String(id));
         setIsInWishlist(wishlistStatus);
       } catch (wishlistErr) {
-        console.warn('Could not check wishlist status:', wishlistErr);
         setIsInWishlist(false);
       }
     } catch (err: any) {
@@ -181,7 +180,6 @@ export default function LostFoundDetailsScreen() {
         setIsInWishlist(true);
       }
     } catch (error: any) {
-      console.error('Error toggling wishlist:', error);
       const isWeb = typeof window !== 'undefined' && (window as any).document != null;
       const message = error.message || 'Failed to update wishlist';
       

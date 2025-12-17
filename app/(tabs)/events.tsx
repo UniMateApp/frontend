@@ -100,7 +100,6 @@ export default function EventsScreen() {
         )
       );
     } catch (error: any) {
-      console.error('Error toggling wishlist:', error);
       const isWeb = typeof window !== 'undefined' && (window as any).document != null;
       if (isWeb) {
         window.alert(error.message || 'Failed to update wishlist');
@@ -259,7 +258,6 @@ export default function EventsScreen() {
       } catch (err: any) {
         if (!shouldUpdate || shouldUpdate()) {
           if (showLoader) {
-            console.error('Failed to load events with wishlist status', err);
             setError(err?.message || String(err));
             // Fallback to basic events without wishlist status
             try {
@@ -334,7 +332,7 @@ export default function EventsScreen() {
       </View>
 
       {/* Test notification buttons - Only show in development */}
-      {__DEV__ && (
+      {/* {__DEV__ && (
         <View style={styles.testButtons}>
           <Text style={[styles.testTitle, { color: colors.textSecondary }]}>🧪 Test Notifications:</Text>
           <View style={styles.testButtonRow}>
@@ -363,7 +361,7 @@ export default function EventsScreen() {
             Perms: {hasNotificationPermission ? '✅' : '❌'} Notif | {hasLocationPermission ? '✅' : '❌'} Location | BG: {isBackgroundTaskActive ? '✅' : '❌'}
           </Text>
         </View>
-      )}
+      )} */}
 
       <SearchBar onSearch={handleSearch} />
 

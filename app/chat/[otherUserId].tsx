@@ -97,7 +97,6 @@ export default function ChatWithUserScreen() {
         if (unsubscribeRef.current) {
           await unsubscribeRef.current();
         }
-        console.log('[Chat] Setting up real-time subscription for conversation:', convo.id);
         unsubscribeRef.current = subscribeToMessages(
           convo.id,
           msg => {

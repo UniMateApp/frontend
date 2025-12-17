@@ -421,7 +421,7 @@ export default function EventDetailsScreen() {
             <View style={styles.infoItem}>
               <FontAwesome name="tag" size={16} color={colors.icon} />
               <Text style={[styles.infoText, { color: colors.text }]}>
-                {event.price === 0 ? 'Free' : `$${event.price}`}
+                {event.price === 0 ? 'Free' : `LKR ${event.price.toFixed(2)}`}
               </Text>
             </View>
           )}

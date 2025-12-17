@@ -46,7 +46,7 @@ export async function testLocation() {
     
     const { latitude, longitude } = location.coords;
     console.log('Current Location:', { latitude, longitude });
-    console.log('Campus Location:', CAMPUS_COORDINATES);
+    console.log('Event Location:', CAMPUS_COORDINATES);
     
     const distance = calculateHaversineDistance(
       latitude,

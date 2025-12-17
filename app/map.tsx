@@ -1,19 +1,31 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { listEvents } from '@/services/events';
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
+interface Event {
+  id: string;
+  title: string;
+  latitude?: number;
+  longitude?: number;
+  location_name?: string;
+  category?: string;
+}
+
 export default function MapScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
+        // Get current location
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const location = await Location.getCurrentPositionAsync({});
@@ -22,8 +34,13 @@ export default function MapScreen() {
             longitude: location.coords.longitude,
           });
         }
+
+        // Fetch events with location data
+        const eventsData = await listEvents();
+        const eventsWithLocation = eventsData.filter((e: any) => e.latitude && e.longitude);
+        setEvents(eventsWithLocation);
       } catch (error) {
-        console.error('Error getting location:', error);
+        console.error('Error getting location or events:', error);
       } finally {
         setLoading(false);
       }
@@ -73,8 +90,22 @@ export default function MapScreen() {
             title="You are here"
             description="Your current location"
             tracksViewChanges={false}
+            pinColor="blue"
           />
         )}
+        {events.map((event) => (
+          <Marker
+            key={event.id}
+            coordinate={{
+              latitude: event.latitude!,
+              longitude: event.longitude!,
+            }}
+            title={event.title}
+            description={event.location_name || event.category || 'Event'}
+            tracksViewChanges={false}
+            pinColor="red"
+          />
+        ))}
       </MapView>
     </View>
   );

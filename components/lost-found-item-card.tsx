@@ -50,7 +50,6 @@ export default function LostFoundItemCard({
     try {
       await onWishlistToggle(String(item.id), isInWishlist);
     } catch (error: any) {
-      console.error('Error toggling wishlist:', error);
       const isWeb = typeof window !== 'undefined' && (window as any).document != null;
       if (isWeb) {
         window.alert(error.message || 'Failed to update wishlist');

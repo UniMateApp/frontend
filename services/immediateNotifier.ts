@@ -114,7 +114,7 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
     const userLng = location.coords.longitude;
 
     console.log('[ImmediateNotifier] User location:', { lat: userLat, lng: userLng });
-    console.log('[ImmediateNotifier] Campus location:', CAMPUS_COORDINATES);
+    console.log('[ImmediateNotifier] Event Location:', CAMPUS_COORDINATES);
 
     // Calculate distance to campus
     const distance = calculateHaversineDistance(

@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, DeviceEventEmitter, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getTotalUnreadCount } from '@/services/chat';
+import { useUser } from '@/contexts/UserContext';
 
 export default function AppHeader() {
   const router = useRouter();
@@ -12,8 +14,10 @@ export default function AppHeader() {
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
   const topPadding = Math.min(insets.top, 10); // cap to keep consistent small gap across devices
+  const { user } = useUser();
 
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState<number>(0);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastText, setToastText] = useState('');
   const translateY = useRef(new Animated.Value(-80)).current;
@@ -81,13 +85,32 @@ export default function AppHeader() {
     };
   }, [translateY]);
 
+  // Fetch unread message count
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchUnreadMessages = async () => {
+      try {
+        const count = await getTotalUnreadCount(user.id);
+        setUnreadMessageCount(count);
+      } catch (error) {
+        console.warn('Error fetching unread message count:', error);
+      }
+    };
+
+    fetchUnreadMessages();
+    const interval = setInterval(fetchUnreadMessages, 10000);
+
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
   const screenWidth = Dimensions.get('window').width;
 
   return (
     <SafeAreaView style={{ backgroundColor: colors.background, paddingTop: topPadding }}>
       <View style={[styles.container, { borderBottomColor: colors.cardBorder }]}>
         <View style={styles.left}>
-          <Image source={require('../assets/images/icon.png')} style={styles.logo} />
+          <Image source={require('../assets/images/unimate.png')} style={styles.logo} />
           <View>
             <Text style={[styles.title, { color: colors.text }]}>UniMate</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Campus life, simplified</Text>
@@ -100,7 +123,14 @@ export default function AppHeader() {
             accessibilityLabel="Open chats"
             style={styles.iconButton}
           >
-            <FontAwesome name="comments" size={20} color={colors.icon} />
+            <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+              <FontAwesome name="comments" size={20} color={colors.icon} />
+              {unreadMessageCount > 0 && (
+                <View style={[styles.badge, { backgroundColor: '#e02424' }]}>
+                  <Text style={styles.badgeText}>{unreadMessageCount > 99 ? '99+' : String(unreadMessageCount)}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity

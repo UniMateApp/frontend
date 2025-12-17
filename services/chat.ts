@@ -125,6 +125,29 @@ export async function getUnreadCounts(currentUserId: string) {
   }));
 }
 
+export async function getTotalUnreadCount(currentUserId: string): Promise<number> {
+  const client = await getSupabase();
+  const { data: conversations, error: convoError } = await client
+    .from('conversations')
+    .select('id')
+    .or(`participant1.eq.${currentUserId},participant2.eq.${currentUserId}`);
+
+  if (convoError) throw convoError;
+  const ids = (conversations || []).map((c: any) => c.id);
+  if (!ids.length) return 0;
+
+  // Count all unread messages for this user
+  const { data, error } = await client
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_read', false)
+    .neq('sender_id', currentUserId)
+    .in('conversation_id', ids);
+
+  if (error) throw error;
+  return (data as any) || 0;
+}
+
 export async function getUserConversations(currentUserId: string) {
   const client = await getSupabase();
   const { data, error } = await client
@@ -164,7 +187,6 @@ export function subscribeToMessages(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
         payload => {
-          console.log('[RT] New message received:', payload.new);
           onInsert(payload.new as Message);
         },
       )
@@ -172,21 +194,10 @@ export function subscribeToMessages(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
         payload => {
-          console.log('[RT] Message updated:', payload.new);
           onUpdate?.(payload.new as Message);
         },
       )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[RT] Successfully subscribed to messages for conversation:', conversationId);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('[RT] Channel error:', err);
-        } else if (status === 'TIMED_OUT') {
-          console.error('[RT] Subscription timed out');
-        } else {
-          console.log('[RT] Subscription status:', status);
-        }
-      });
+      .subscribe();
     
     return channel;
   })();
@@ -194,7 +205,6 @@ export function subscribeToMessages(
   return async () => {
     const channel = await channelPromise;
     const client = await getSupabase();
-    console.log('[RT] Unsubscribing from conversation:', conversationId);
     await client.removeChannel(channel);
   };
 }
@@ -212,21 +222,10 @@ export function subscribeToIncomingMessages(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=neq.${currentUserId}` },
         payload => {
-          console.log('[RT] Incoming message received:', payload.new);
           onInsert(payload.new as Message);
         },
       )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[RT] Successfully subscribed to incoming messages for user:', currentUserId);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('[RT] Channel error:', err);
-        } else if (status === 'TIMED_OUT') {
-          console.error('[RT] Subscription timed out');
-        } else {
-          console.log('[RT] Subscription status:', status);
-        }
-      });
+      .subscribe();
     
     return channel;
   })();
@@ -234,7 +233,6 @@ export function subscribeToIncomingMessages(
   return async () => {
     const channel = await channelPromise;
     const client = await getSupabase();
-    console.log('[RT] Unsubscribing from incoming messages');
     await client.removeChannel(channel);
   };
 }
