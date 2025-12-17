@@ -1,3 +1,4 @@
+import { DEFAULT_LOCATION, DEFAULT_LOCATION_NAME } from '@/constants/campus';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { createNotifications } from '@/services/notifications';
@@ -5,10 +6,8 @@ import { supabase } from '@/services/supabase';
 import { FontAwesome } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 
 type Props = {
@@ -30,11 +29,8 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [latInput, setLatInput] = useState('');
-  const [lngInput, setLngInput] = useState('');
 
-  const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !selectedLocation || !imageUrl;
+  const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !imageUrl;
 
   const getMissingFields = () => {
     const missing = [] as string[];
@@ -42,7 +38,6 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
     if (!description.trim()) missing.push('Description');
     if (!contact.trim()) missing.push('Contact');
     if (!imageUrl) missing.push('Photo');
-    if (!selectedLocation) missing.push('Location');
     return missing;
   };
 
@@ -176,41 +171,12 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     setImageUrl(null);
   };
 
-  const handleManualLocationSave = () => {
-    const lat = parseFloat(latInput);
-    const lng = parseFloat(lngInput);
-    if (isNaN(lat) || isNaN(lng)) {
-      Alert.alert('Invalid coordinates', 'Please enter valid latitude and longitude values.');
-      return;
-    }
-    setSelectedLocation({ latitude: lat, longitude: lng });
-  };
-
-  const handleUseCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required to use current location.');
-        return;
-      }
-      
-      const location = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = location.coords;
-      
-      setSelectedLocation({ latitude, longitude });
-      setLatInput(latitude.toString());
-      setLngInput(longitude.toString());
-    } catch (error: any) {
-      Alert.alert('Error', 'Failed to get current location: ' + error.message);
-    }
-  };
-
   const submit = async () => {
     if (isPostDisabled) {
       const missing = getMissingFields();
       const message = missing.length
         ? `Please complete: ${missing.join(', ')}`
-        : 'Please add a photo, pick a location, and fill in all fields before posting.';
+        : 'Please fill in all required fields before posting.';
       Alert.alert('Missing details', message);
       return;
     }
@@ -224,9 +190,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
       image_url: imageUrl,
       createdAt: new Date().toISOString(),
       resolved: false,
-      location: selectedLocation
-      ? `${selectedLocation.latitude},${selectedLocation.longitude}`
-      : null,
+      location: DEFAULT_LOCATION, // Fixed location: University of Moratuwa
     };
 
     console.log('📝 Submitting data with image:', post);
@@ -278,7 +242,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
               matched_post_ids: matchedIds,
               new_post_client_id: post.id,
               kind: post.type.toLowerCase(),
-              location: post.location,
+              location: DEFAULT_LOCATION_NAME,
             };
 
             notifications.push({
@@ -318,7 +282,6 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     setShowPhotoOptions(false);
     setPreviewImage(null);
     setShowPreview(false);
-    setSelectedLocation(null); // Reset location
     onClose();
   };
 
@@ -434,119 +397,28 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
             <TextInput placeholder="Item name" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Description" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} style={[styles.inputMultiline, { color: colors.text, borderColor: colors.cardBorder }]} multiline numberOfLines={4} />
             <TextInput placeholder="Contact (WhatsApp)" placeholderTextColor={colors.textSecondary} value={contact} onChangeText={setContact} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
-
-            {/* Location Section with Google Maps */}
-            <View style={[styles.mapSection, { borderColor: colors.cardBorder, backgroundColor: colors.background, marginBottom: 16 }]}>
-              <View style={styles.locationHeader}>
-                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16 }}>Location</Text>
-                <TouchableOpacity 
-                  style={[styles.useLocationButton, { borderColor: colors.primary }]} 
-                  onPress={handleUseCurrentLocation}
-                >
-                  <FontAwesome name="location-arrow" size={14} color={colors.primary} />
-                  <Text style={{ color: colors.primary, marginLeft: 6, fontSize: 12 }}>My Location</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {selectedLocation ? (
-                <View style={styles.mapContainer}>
-                  <MapView
-                    provider={PROVIDER_GOOGLE}
-                    style={styles.map}
-                    initialRegion={{
-                      latitude: selectedLocation.latitude,
-                      longitude: selectedLocation.longitude,
-                      latitudeDelta: 0.005,
-                      longitudeDelta: 0.005,
-                    }}
-                    onPress={(e) => {
-                      const { latitude, longitude } = e.nativeEvent.coordinate;
-                      setSelectedLocation({ latitude, longitude });
-                      setLatInput(latitude.toFixed(6));
-                      setLngInput(longitude.toFixed(6));
-                    }}
-                    liteMode={true}
-                    minZoomLevel={12}
-                    maxZoomLevel={18}
-                    showsUserLocation={false}
-                    showsMyLocationButton={false}
-                    showsCompass={false}
-                    showsScale={false}
-                    showsTraffic={false}
-                    showsBuildings={false}
-                    showsIndoors={false}
-                    zoomEnabled={true}
-                    scrollEnabled={true}
-                    pitchEnabled={false}
-                    rotateEnabled={false}
-                    loadingEnabled={false}
-                    cacheEnabled={true}
-                    toolbarEnabled={false}
-                  >
-                    <Marker
-                      coordinate={selectedLocation}
-                      title="Selected Location"
-                      description="Tap on map to change"
-                      tracksViewChanges={false}
-                    />
-                  </MapView>
-                  <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 12 }}>
-                    📍 {selectedLocation.latitude.toFixed(5)}, {selectedLocation.longitude.toFixed(5)}
-                  </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
-                    Tap on the map to adjust the marker
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.mapPlaceholder}>
-                  <FontAwesome name="map-marker" size={32} color={colors.textSecondary} />
-                  <Text style={{ color: colors.text, marginTop: 8, fontWeight: '500' }}>
-                    Set a location
-                  </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4, textAlign: 'center' }}>
-                    Tap "My Location" or enter coordinates below
-                  </Text>
-                </View>
-              )}
-
-              {/* Manual coordinate entry */}
-              <View style={styles.manualRow}>
-                <TextInput
-                  style={[styles.manualInput, { borderColor: colors.cardBorder, color: colors.text }]}
-                  placeholder="Latitude"
-                  placeholderTextColor={colors.textSecondary}
-                  value={latInput}
-                  onChangeText={setLatInput}
-                  keyboardType="decimal-pad"
-                />
-                <TextInput
-                  style={[styles.manualInput, { borderColor: colors.cardBorder, color: colors.text }]}
-                  placeholder="Longitude"
-                  placeholderTextColor={colors.textSecondary}
-                  value={lngInput}
-                  onChangeText={setLngInput}
-                  keyboardType="decimal-pad"
-                />
-                <TouchableOpacity 
-                  style={[styles.saveCoordButton, { backgroundColor: colors.primary }]} 
-                  onPress={handleManualLocationSave}
-                >
-                  <FontAwesome name="check" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
+            
+            {/* Location info - read-only */}
+            <View style={[styles.locationInfoBox, { backgroundColor: colors.background, borderColor: colors.cardBorder }]}>
+              <FontAwesome name="university" size={16} color={colors.primary} />
+              <Text style={[styles.locationInfoText, { color: colors.textSecondary }]}>
+                Location: {DEFAULT_LOCATION_NAME}
+              </Text>
             </View>
           </ScrollView>
 
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
-              <Text style={{ color: colors.text }}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: isPostDisabled ? colors.cardBorder : colors.primary, opacity: isPostDisabled ? 0.7 : 1 }]}
-              onPress={submit}
-            >
-              <Text style={{ color: '#fff' }}>Post</Text>
-            </TouchableOpacity>
+          <View style={styles.actionsContainer}>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
+                <Text style={{ color: colors.text }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: isPostDisabled ? colors.cardBorder : colors.primary, opacity: isPostDisabled ? 0.7 : 1 }]}
+                onPress={submit}
+              >
+                <Text style={{ color: '#fff' }}>Post</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -556,7 +428,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, padding: 16 },
+  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, padding: 16, paddingBottom: 24 },
   heading: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   typeRow: { flexDirection: 'row', marginBottom: 12 },
   typeButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginRight: 8 },
@@ -658,66 +530,27 @@ const styles = StyleSheet.create({
   
   input: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
   inputMultiline: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10, minHeight: 80 },
-  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  button: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
+  actionsContainer: { 
+    paddingTop: 12, 
+    paddingBottom: 20, 
+    borderTopWidth: 1, 
+    borderTopColor: 'rgba(0,0,0,0.05)' 
+  },
+  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  button: { flex: 1, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
   
-  // Map section styles
-  mapSection: {
-    borderWidth: 1,
-    borderRadius: 12,
+  // Location info box (read-only)
+  locationInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 12,
-  },
-  locationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  useLocationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 8,
     borderWidth: 1,
-    borderRadius: 6,
-  },
-  mapContainer: {
-    width: '100%',
-    height: 200,
-    marginBottom: 12,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#e0e0e0',
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  mapPlaceholder: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  manualRow: {
-    flexDirection: 'row',
+    marginBottom: 16,
     gap: 8,
-    alignItems: 'center',
   },
-  manualInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  saveCoordButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+  locationInfoText: {
+    fontSize: 13,
+    marginLeft: 4,
   },
 });
