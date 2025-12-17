@@ -1,26 +1,87 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as Location from 'expo-location';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 export default function MapScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const location = await Location.getCurrentPositionAsync({});
+          setCurrentLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+        }
+      } catch (error) {
+        console.error('Error getting location:', error);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading map...</Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
-      <View style={styles.box}>
-        <Text style={[styles.title, { color: colors.text }]}>Campus Map</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Interactive map coming soon.</Text>
-      </View>
-    </ScrollView>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <MapView
+        provider={PROVIDER_GOOGLE}
+        style={styles.map}
+        initialRegion={{
+          latitude: currentLocation?.latitude || 15.8700,
+          longitude: currentLocation?.longitude || 75.4370,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }}
+        minZoomLevel={10}
+        maxZoomLevel={20}
+        showsUserLocation={true}
+        showsMyLocationButton={true}
+        showsCompass={false}
+        showsScale={false}
+        showsTraffic={false}
+        showsBuildings={false}
+        showsIndoors={false}
+        zoomEnabled={true}
+        scrollEnabled={true}
+        pitchEnabled={false}
+        rotateEnabled={false}
+        loadingEnabled={false}
+        cacheEnabled={true}
+        toolbarEnabled={false}
+      >
+        {currentLocation && (
+          <Marker
+            coordinate={currentLocation}
+            title="You are here"
+            description="Your current location"
+            tracksViewChanges={false}
+          />
+        )}
+      </MapView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16 },
-  box: { marginTop: 40, alignItems: 'center' },
-  title: { fontSize: 22, fontWeight: '700', marginBottom: 8 },
-  subtitle: { fontSize: 16 },
+  map: { flex: 1 },
+  loadingText: { marginTop: 12, fontSize: 14 },
 });

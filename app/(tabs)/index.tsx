@@ -6,13 +6,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { listEvents as apiListEvents } from '@/services/events';
 import { resolveLostFoundItem } from '@/services/lostFound';
 import {
-  Event,
-  MappedLostFoundItem,
-  addEventToWishlist,
-  addLostFoundToWishlist,
-  getEventsWithWishlistStatus,
-  getLostFoundWithWishlistStatus,
-  removeItemFromWishlist,
+    Event,
+    MappedLostFoundItem,
+    addEventToWishlist,
+    addLostFoundToWishlist,
+    getEventsWithWishlistStatus,
+    getLostFoundWithWishlistStatus,
+    removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -285,7 +285,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingVertical: 16 },
+  content: { paddingVertical: 16, paddingBottom: 90 },
   headerSection: { paddingHorizontal: 16 },
   chipsRow: {
     flexDirection: 'row',

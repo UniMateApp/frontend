@@ -1,3 +1,4 @@
+import { DEFAULT_LOCATION, DEFAULT_LOCATION_NAME } from '@/constants/campus';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { createNotifications } from '@/services/notifications';
@@ -7,7 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapLocationPicker from './map-location-picker';
 
 
 type Props = {
@@ -29,9 +30,14 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    address?: string;
+  } | null>(null);
 
-  const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !selectedLocation || !imageUrl;
+  const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !imageUrl;
 
   const getMissingFields = () => {
     const missing = [] as string[];
@@ -39,7 +45,6 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
     if (!description.trim()) missing.push('Description');
     if (!contact.trim()) missing.push('Contact');
     if (!imageUrl) missing.push('Photo');
-    if (!selectedLocation) missing.push('Location');
     return missing;
   };
 
@@ -173,17 +178,12 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     setImageUrl(null);
   };
 
-  const handleMapPress = (event: any) => {
-    const { latitude, longitude } = event.nativeEvent.coordinate;
-    setSelectedLocation({ latitude, longitude });
-  };
-
   const submit = async () => {
     if (isPostDisabled) {
       const missing = getMissingFields();
       const message = missing.length
         ? `Please complete: ${missing.join(', ')}`
-        : 'Please add a photo, pick a location, and fill in all fields before posting.';
+        : 'Please fill in all required fields before posting.';
       Alert.alert('Missing details', message);
       return;
     }
@@ -197,9 +197,9 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
       image_url: imageUrl,
       createdAt: new Date().toISOString(),
       resolved: false,
-      location: selectedLocation
-      ? `${selectedLocation.latitude},${selectedLocation.longitude}`
-      : null,
+      location: selectedLocation 
+        ? { latitude: selectedLocation.latitude, longitude: selectedLocation.longitude }
+        : DEFAULT_LOCATION,
     };
 
     console.log('📝 Submitting data with image:', post);
@@ -251,7 +251,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
               matched_post_ids: matchedIds,
               new_post_client_id: post.id,
               kind: post.type.toLowerCase(),
-              location: post.location,
+              location: selectedLocation?.address || DEFAULT_LOCATION_NAME,
             };
 
             notifications.push({
@@ -291,17 +291,9 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     setShowPhotoOptions(false);
     setPreviewImage(null);
     setShowPreview(false);
-    setSelectedLocation(null); // Reset location
+    setSelectedLocation(null);
     onClose();
   };
-
-  // Move the console log outside of the JSX to avoid interference
-  console.log('Rendering MapView with initial region:', {
-    latitude: 6.7955,
-    longitude: 79.9003,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  });
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -415,48 +407,62 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
             <TextInput placeholder="Item name" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Description" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} style={[styles.inputMultiline, { color: colors.text, borderColor: colors.cardBorder }]} multiline numberOfLines={4} />
             <TextInput placeholder="Contact (WhatsApp)" placeholderTextColor={colors.textSecondary} value={contact} onChangeText={setContact} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
-
-            {/* Enhanced Map Section */}
-            <View style={styles.mapContainer}>
-              <MapView
-                provider={PROVIDER_GOOGLE} // Use Google Maps provider for better performance
-                style={styles.map}
-                initialRegion={{
-                  latitude: 6.7955,
-                  longitude: 79.9003,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                onPress={handleMapPress}
-                showsUserLocation={true} // Show user's current location
-                showsMyLocationButton={true} // Add a button to center on user's location
-                zoomEnabled={true} // Allow zooming
-                rotateEnabled={true} // Allow rotation
+            
+            {/* Location Picker */}
+            <View style={styles.locationSection}>
+              <Text style={[styles.locationLabel, { color: colors.text }]}>Location</Text>
+              <TouchableOpacity 
+                style={[styles.locationButton, { 
+                  backgroundColor: colors.background, 
+                  borderColor: selectedLocation ? colors.primary : colors.cardBorder 
+                }]}
+                onPress={() => setShowMapPicker(true)}
               >
-                {selectedLocation && (
-                  <Marker
-                    coordinate={selectedLocation}
-                    draggable
-                    onDragEnd={handleMapPress}
-                    pinColor="blue" // Change marker color for better visibility
-                  />
-                )}
-              </MapView>
+                <FontAwesome 
+                  name="map-marker" 
+                  size={18} 
+                  color={selectedLocation ? colors.primary : colors.textSecondary} 
+                />
+                <View style={styles.locationButtonText}>
+                  <Text style={[
+                    styles.locationButtonTitle, 
+                    { color: selectedLocation ? colors.text : colors.textSecondary }
+                  ]}>
+                    {selectedLocation ? 'Location Selected' : 'Select Location on Map'}
+                  </Text>
+                  {selectedLocation?.address && (
+                    <Text style={[styles.locationButtonAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {selectedLocation.address}
+                    </Text>
+                  )}
+                </View>
+                <FontAwesome name="chevron-right" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
           </ScrollView>
 
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
-              <Text style={{ color: colors.text }}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: isPostDisabled ? colors.cardBorder : colors.primary, opacity: isPostDisabled ? 0.7 : 1 }]}
-              onPress={submit}
-            >
-              <Text style={{ color: '#fff' }}>Post</Text>
-            </TouchableOpacity>
+          <View style={styles.actionsContainer}>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
+                <Text style={{ color: colors.text }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: isPostDisabled ? colors.cardBorder : colors.primary, opacity: isPostDisabled ? 0.7 : 1 }]}
+                onPress={submit}
+              >
+                <Text style={{ color: '#fff' }}>Post</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+
+        {/* Map Location Picker Modal */}
+        <MapLocationPicker
+          visible={showMapPicker}
+          onClose={() => setShowMapPicker(false)}
+          onSelectLocation={(location) => setSelectedLocation(location)}
+          initialLocation={selectedLocation || undefined}
+        />
       </View>
     </Modal>
   );
@@ -464,7 +470,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, padding: 16 },
+  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, padding: 16, paddingBottom: 32 },
   heading: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   typeRow: { flexDirection: 'row', marginBottom: 12 },
   typeButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginRight: 8 },
@@ -566,15 +572,56 @@ const styles = StyleSheet.create({
   
   input: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
   inputMultiline: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10, minHeight: 80 },
-  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  button: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
-  mapContainer: {
-    height: 250, // Increased height for better visibility
-    borderRadius: 12,
-    overflow: 'hidden',
+  actionsContainer: { 
+    paddingTop: 12, 
+    paddingBottom: 32, 
+    borderTopWidth: 1, 
+    borderTopColor: 'rgba(0,0,0,0.05)' 
+  },
+  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  button: { flex: 1, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
+  
+  // Location picker styles
+  locationSection: {
     marginBottom: 16,
   },
-  map: {
+  locationLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+  },
+  locationButtonText: {
     flex: 1,
+  },
+  locationButtonTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  locationButtonAddress: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  
+  // Location info box (read-only) - kept for backward compatibility
+  locationInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 8,
+  },
+  locationInfoText: {
+    fontSize: 13,
+    marginLeft: 4,
   },
 });

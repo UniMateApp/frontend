@@ -62,7 +62,7 @@ export default function EditProfileScreen() {
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 40 }]}>
         <View style={[styles.header, { backgroundColor: colors.card }]}>
           <View style={styles.headerButtons}>
             <TouchableOpacity 

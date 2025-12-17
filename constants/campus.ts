@@ -4,11 +4,16 @@
  */
 
 export const CAMPUS_COORDINATES = {
-  // Default coordinates (example: University of Example)
-  // Update these with your actual university coordinates
-  latitude: 5.949490,  // Example: San Francisco
-  longitude: 80.512983,
+  // University of Moratuwa, Sri Lanka
+  latitude: 6.7964,
+  longitude: 79.9014,
 };
+
+// Fixed location name for Lost & Found posts
+export const DEFAULT_LOCATION_NAME = "University of Moratuwa";
+
+// Formatted location string for database storage
+export const DEFAULT_LOCATION = `${CAMPUS_COORDINATES.latitude},${CAMPUS_COORDINATES.longitude}`;
 
 export const NOTIFICATION_RADIUS_KM = 2; // 2 kilometers
 

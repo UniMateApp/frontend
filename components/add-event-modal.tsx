@@ -140,7 +140,7 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { maxHeight: '85%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1 },
-  content: { padding: 16 },
+  content: { padding: 16, paddingBottom: 32 },
   heading: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 4 },
   input: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },

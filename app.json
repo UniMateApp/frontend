@@ -10,6 +10,9 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyBMt93P9MQHtpD9s62knVvMRlpInN7KIOo"
+      },
       "infoPlist": {
         "UIBackgroundModes": [
           "location",
@@ -25,6 +28,11 @@
         "foregroundImage": "./assets/images/unimate.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBMt93P9MQHtpD9s62knVvMRlpInN7KIOo"
+        }
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

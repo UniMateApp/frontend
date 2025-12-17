@@ -92,7 +92,7 @@ export default function NotificationsScreen() {
         <FlatList
           data={notifications}
           keyExtractor={i => String(i.id)}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
           ListEmptyComponent={() => (
             <View style={styles.empty}>
               <Text style={{ color: colors.textSecondary }}>No notifications.</Text>
