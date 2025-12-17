@@ -2,10 +2,15 @@ import AddEventModal from '@/components/add-event-modal';
 import { EventCard } from '@/components/event-card';
 import { SearchBar } from '@/components/search-bar';
 import { Colors } from '@/constants/theme';
+import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEventScheduler } from '@/hooks/useEventScheduler';
 import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService';
-import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
+import { 
+  createEvent as apiCreateEvent, 
+  deleteEvent as apiDeleteEvent, 
+  listEvents as apiListEvents,
+} from '@/services/events';
 import { forceCheckLocation, sendTestNotification } from '@/services/immediateNotifier';
 import {
     Event,
@@ -21,6 +26,7 @@ import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity,
 export default function EventsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const { user } = useUser();
   const [query, setQuery] = useState('');
   const [eventsWithWishlist, setEventsWithWishlist] = useState<(Event & { isInWishlist: boolean })[]>([]);
   const [loading, setLoading] = useState(false);
@@ -246,6 +252,7 @@ export default function EventsScreen() {
 
       try {
         const eventsWithWishlistStatus = await getEventsWithWishlistStatus();
+        
         if (!shouldUpdate || shouldUpdate()) {
           setEventsWithWishlist(eventsWithWishlistStatus);
         }
@@ -277,44 +284,18 @@ export default function EventsScreen() {
   );
 
 
-  const handleAddEvent = (ev: any) => {
-    (async () => {
-      try {
-        // Convert price to number: "Free" -> 0, parse numeric strings, default to null
-        let priceValue: number | null = null;
-        if (ev.price) {
-          const lower = String(ev.price).toLowerCase().trim();
-          if (lower === 'free' || lower === 'free admission') {
-            priceValue = 0;
-          } else {
-            const parsed = parseFloat(String(ev.price));
-            priceValue = isNaN(parsed) ? null : parsed;
-          }
-        }
+  const handleAddEvent = async (ev: any) => {
+    try {
+      const created = await apiCreateEvent(ev);
 
-        const created = await apiCreateEvent({
-          title: ev.title,
-          description: ev.description,
-          category: ev.category,
-          organizer: ev.organizer,
-          start_at: ev.date,
-          location: ev.location,
-          price: priceValue,
-          image_url: typeof ev.image === 'string' ? ev.image : null,
-        });
-
-        if (created) {
-          alert('Event added successfully! ID = ' + created.id);
-          await loadEvents(); // Fetch the latest events from DB
-        } else {
-          console.warn('API did not return the created event object.');
-          alert('Event added locally, but API did not return a record.');
-        }
-      } catch (err: any) {
-        console.error('Create event failed:', err);
-        alert('Failed to add event: ' + (err?.message || String(err)));
+      if (created) {
+        Alert.alert('Success', 'Event created successfully!');
+        await loadEvents();
       }
-    })();
+    } catch (err: any) {
+      console.error('Create event failed:', err);
+      Alert.alert('Error', err?.message || 'Failed to create event');
+    }
   };
 
   // Fetch events from Supabase on mount
@@ -393,12 +374,21 @@ export default function EventsScreen() {
           organizer={e.organizer || 'Unknown Organizer'}
           date={e.start_at ? new Date(e.start_at).toLocaleDateString() : 'Date TBD'}
           location={e.location || 'Location TBD'}
+          locationName={e.location_name}
+          latitude={e.latitude}
+          longitude={e.longitude}
           imageUrl={e.image_url}
+          price={e.price !== null ? (e.price === 0 ? 'Free' : `LKR ${e.price.toFixed(2)}`) : undefined}
+          category={e.category}
+          createdBy={e.created_by}
           onPress={() => handleEventPress(e.id)}
           onBookmark={() => handleWishlistToggle(e.id, e.isInWishlist)}
           isBookmarked={e.isInWishlist}
           onShare={() => handleShare(e)}
-          onRsvp={() => handleRSVP(e)}
+          onEdit={() => {
+            Alert.alert('Edit Event', 'Edit functionality coming soon');
+          }}
+          onDelete={() => handleDeleteEvent(e.id, e.title)}
           onLongPress={() => {
             Alert.alert(
               'Event Actions',

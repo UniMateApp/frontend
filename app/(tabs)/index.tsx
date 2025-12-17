@@ -247,10 +247,24 @@ export default function HomeScreen() {
               organizer={event.organizer || 'Unknown Organizer'}
               date={event.start_at ? new Date(event.start_at).toLocaleDateString() : 'Date TBD'}
               location={event.location || 'Location TBD'}
+              locationName={event.location_name}
+              latitude={event.latitude}
+              longitude={event.longitude}
+              price={event.price !== null ? (event.price === 0 ? 'Free' : `LKR ${event.price.toFixed(2)}`) : undefined}
               imageUrl={event.image_url || require('../../assets/images/icon.png')}
+              createdBy={event.created_by}
               onPress={() => handleEventPress(event.id)}
               onBookmark={() => handleWishlistToggle(event.id, 'event', event.isInWishlist)}
               isBookmarked={event.isInWishlist}
+              onShare={() => {
+                Alert.alert('Share', `Share "${event.title}" - Feature coming soon!`);
+              }}
+              onEdit={() => {
+                Alert.alert('Edit Event', 'Edit functionality coming soon');
+              }}
+              onDelete={() => {
+                Alert.alert('Delete Event', `Delete "${event.title}" - Navigate to event details to delete`);
+              }}
             />
           );
         } else {

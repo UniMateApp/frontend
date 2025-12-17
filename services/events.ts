@@ -2,7 +2,11 @@ import { supabase as getSupabase } from './supabase';
 
 export async function listEvents() {
   const supabase = await getSupabase();
-  const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('is_resolved', false)
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return data;
 }

@@ -19,10 +19,15 @@ export interface Event {
   category?: string;
   organizer?: string;
   start_at?: string;
+  end_at?: string;
   location?: string;
+  latitude?: number;
+  longitude?: number;
+  location_name?: string;
   price?: number;
   image_url?: string;
-  attendees?: number;
+  attendees?: any[];
+  registration_deadline?: string;
   created_by?: string;
   created_at: string;
   updated_at: string;

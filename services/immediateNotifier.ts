@@ -137,12 +137,12 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
     return { withinRadius, distance, location };
   } catch (error: any) {
     if (error.message === 'Location request timeout') {
-      console.error('[ImmediateNotifier] ❌ Location request timed out - location services may be slow or unavailable');
+      console.warn('[ImmediateNotifier] ⚠️ Location request timed out - location services may be slow or unavailable');
     } else if (error.message?.includes('location services')) {
-      console.error('[ImmediateNotifier] ❌ Location services disabled:', error.message);
-      console.error('[ImmediateNotifier] 💡 Enable location in: Settings → Location → Turn on');
+      console.warn('[ImmediateNotifier] ⚠️ Location services disabled:', error.message);
+      console.log('[ImmediateNotifier] 💡 Enable location in: Settings → Location → Turn on');
     } else {
-      console.error('[ImmediateNotifier] ❌ Error checking user location:', error);
+      console.warn('[ImmediateNotifier] ⚠️ Error checking user location:', error.message || error);
     }
     return { withinRadius: false, distance: null, location: null };
   }
