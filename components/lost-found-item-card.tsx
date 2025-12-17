@@ -69,19 +69,30 @@ export default function LostFoundItemCard({
   };
 
   const [placeName, setPlaceName] = useState<string | null>(null);
+  const [loadingPlace, setLoadingPlace] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     const coords = parseLatLng(item.location);
-    if (!coords) return;
+    if (!coords) {
+      setLoadingPlace(false);
+      return;
+    }
 
+    setLoadingPlace(true);
     (async () => {
       try {
         const name = await getPlaceNameFromLatLng(coords.latitude, coords.longitude);
-        if (mounted) setPlaceName(name);
+        if (mounted) {
+          setPlaceName(name);
+          setLoadingPlace(false);
+        }
       } catch (err) {
         console.warn('geocode: failed to resolve place name', err);
-        if (mounted) setPlaceName(null);
+        if (mounted) {
+          setPlaceName(null);
+          setLoadingPlace(false);
+        }
       }
     })();
 
@@ -189,7 +200,7 @@ export default function LostFoundItemCard({
               <View style={styles.metaItem}>
                 <FontAwesome name="map-marker" size={12} color={colors.icon} />
                 <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                  {placeName ? `near ${placeName}` : item.location}
+                  {loadingPlace ? 'Loading location...' : placeName ? placeName : 'Location unavailable'}
                 </Text>
               </View>
             )}

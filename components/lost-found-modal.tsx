@@ -198,7 +198,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
       createdAt: new Date().toISOString(),
       resolved: false,
       location: selectedLocation 
-        ? { latitude: selectedLocation.latitude, longitude: selectedLocation.longitude }
+        ? `${selectedLocation.latitude},${selectedLocation.longitude}`
         : DEFAULT_LOCATION,
     };
 
