@@ -8,6 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import MapLocationPicker from './map-location-picker';
 
 
 type Props = {
@@ -29,6 +30,12 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    address?: string;
+  } | null>(null);
 
   const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !imageUrl;
 
@@ -190,7 +197,9 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
       image_url: imageUrl,
       createdAt: new Date().toISOString(),
       resolved: false,
-      location: DEFAULT_LOCATION, // Fixed location: University of Moratuwa
+      location: selectedLocation 
+        ? { latitude: selectedLocation.latitude, longitude: selectedLocation.longitude }
+        : DEFAULT_LOCATION,
     };
 
     console.log('📝 Submitting data with image:', post);
@@ -242,7 +251,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
               matched_post_ids: matchedIds,
               new_post_client_id: post.id,
               kind: post.type.toLowerCase(),
-              location: DEFAULT_LOCATION_NAME,
+              location: selectedLocation?.address || DEFAULT_LOCATION_NAME,
             };
 
             notifications.push({
@@ -282,6 +291,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     setShowPhotoOptions(false);
     setPreviewImage(null);
     setShowPreview(false);
+    setSelectedLocation(null);
     onClose();
   };
 
@@ -398,12 +408,36 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
             <TextInput placeholder="Description" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} style={[styles.inputMultiline, { color: colors.text, borderColor: colors.cardBorder }]} multiline numberOfLines={4} />
             <TextInput placeholder="Contact (WhatsApp)" placeholderTextColor={colors.textSecondary} value={contact} onChangeText={setContact} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             
-            {/* Location info - read-only */}
-            <View style={[styles.locationInfoBox, { backgroundColor: colors.background, borderColor: colors.cardBorder }]}>
-              <FontAwesome name="university" size={16} color={colors.primary} />
-              <Text style={[styles.locationInfoText, { color: colors.textSecondary }]}>
-                Location: {DEFAULT_LOCATION_NAME}
-              </Text>
+            {/* Location Picker */}
+            <View style={styles.locationSection}>
+              <Text style={[styles.locationLabel, { color: colors.text }]}>Location</Text>
+              <TouchableOpacity 
+                style={[styles.locationButton, { 
+                  backgroundColor: colors.background, 
+                  borderColor: selectedLocation ? colors.primary : colors.cardBorder 
+                }]}
+                onPress={() => setShowMapPicker(true)}
+              >
+                <FontAwesome 
+                  name="map-marker" 
+                  size={18} 
+                  color={selectedLocation ? colors.primary : colors.textSecondary} 
+                />
+                <View style={styles.locationButtonText}>
+                  <Text style={[
+                    styles.locationButtonTitle, 
+                    { color: selectedLocation ? colors.text : colors.textSecondary }
+                  ]}>
+                    {selectedLocation ? 'Location Selected' : 'Select Location on Map'}
+                  </Text>
+                  {selectedLocation?.address && (
+                    <Text style={[styles.locationButtonAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {selectedLocation.address}
+                    </Text>
+                  )}
+                </View>
+                <FontAwesome name="chevron-right" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
           </ScrollView>
 
@@ -421,6 +455,14 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
             </View>
           </View>
         </View>
+
+        {/* Map Location Picker Modal */}
+        <MapLocationPicker
+          visible={showMapPicker}
+          onClose={() => setShowMapPicker(false)}
+          onSelectLocation={(location) => setSelectedLocation(location)}
+          initialLocation={selectedLocation || undefined}
+        />
       </View>
     </Modal>
   );
@@ -539,7 +581,36 @@ const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   button: { flex: 1, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
   
-  // Location info box (read-only)
+  // Location picker styles
+  locationSection: {
+    marginBottom: 16,
+  },
+  locationLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+  },
+  locationButtonText: {
+    flex: 1,
+  },
+  locationButtonTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  locationButtonAddress: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  
+  // Location info box (read-only) - kept for backward compatibility
   locationInfoBox: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -9,6 +9,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 // Default image for lost and found items
 const DEFAULT_LOST_FOUND_IMAGE = require('@/assets/images/icon.png');
@@ -437,6 +438,45 @@ export default function LostFoundDetailsScreen() {
           )}
         </View>
 
+        {/* Map View Section */}
+        {item.location && (() => {
+          const parts = String(item.location).split(',').map((s: string) => s.trim());
+          if (parts.length >= 2) {
+            const lat = Number(parts[0]);
+            const lon = Number(parts[1]);
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              return (
+                <View style={styles.section}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Location on Map</Text>
+                  <View style={styles.mapContainer}>
+                    <MapView
+                      provider={PROVIDER_GOOGLE}
+                      style={styles.map}
+                      initialRegion={{
+                        latitude: lat,
+                        longitude: lon,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01,
+                      }}
+                      scrollEnabled={true}
+                      zoomEnabled={true}
+                      pitchEnabled={false}
+                      rotateEnabled={false}
+                    >
+                      <Marker
+                        coordinate={{ latitude: lat, longitude: lon }}
+                        title={item.item_name}
+                        description={placeName || 'Item location'}
+                      />
+                    </MapView>
+                  </View>
+                </View>
+              );
+            }
+          }
+          return null;
+        })()}
+
         {/* Actions */}
         <View style={styles.actionsSection}>
           <TouchableOpacity 
@@ -639,6 +679,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
     fontWeight: '500',
+  },
+  mapContainer: {
+    height: 250,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  map: {
+    flex: 1,
   },
   actionsSection: {
     flexDirection: 'row',
