@@ -10,9 +10,9 @@ import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
 import { createLostFound, resolveLostFoundItem } from '../../services/lostFound';
 import {
-  addLostFoundToWishlist,
-  getLostFoundWithWishlistStatus,
-  removeItemFromWishlist
+    addLostFoundToWishlist,
+    getLostFoundWithWishlistStatus,
+    removeItemFromWishlist
 } from '../../services/selectiveWishlist';
 
 type Post = {
@@ -98,7 +98,24 @@ export default function LostFoundScreen() {
         resolved: false, // Database uses 'resolved' field
         location: post.location, // Location as string
       });
-      setPosts(prev => [created, ...prev]);
+      
+      // Map database fields to expected interface fields
+      const mappedPost: Post = {
+        id: created.id,
+        item_name: created.title, // Map 'title' to 'item_name'
+        description: created.description,
+        type: created.kind, // Map 'kind' to 'type'
+        location: created.location,
+        contact_info: created.contact, // Map 'contact' to 'contact_info'
+        image_url: created.image_url,
+        created_by: created.created_by,
+        created_at: created.created_at,
+        updated_at: created.created_at, // Use created_at for updated_at
+        is_resolved: created.resolved, // Map 'resolved' to 'is_resolved'
+        isInWishlist: false
+      };
+      
+      setPosts(prev => [mappedPost, ...prev]);
       Alert.alert('Success', 'Post added successfully!');
     } catch (err: any) {
       console.error('Failed to add post', err);
