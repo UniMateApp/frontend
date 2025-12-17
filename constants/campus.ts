@@ -5,7 +5,7 @@
 
 export const CAMPUS_COORDINATES = {
   // University of Moratuwa, Sri Lanka
-  latitude: 6.1542951,
+  latitude: 6.1501794,
   longitude: 80.6446576,
 };
 
@@ -15,7 +15,7 @@ export const DEFAULT_LOCATION_NAME = "University of Moratuwa";
 // Formatted location string for database storage
 export const DEFAULT_LOCATION = `${CAMPUS_COORDINATES.latitude},${CAMPUS_COORDINATES.longitude}`;
 
-export const NOTIFICATION_RADIUS_KM = 2; // 2 kilometers
+export const NOTIFICATION_RADIUS_KM = 8; // 2 kilometers
 
 // For testing: 2 minutes before event
 // For production: change to 60 (1 hour before event)
