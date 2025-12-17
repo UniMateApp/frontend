@@ -314,7 +314,7 @@ export default function LostFoundDetailsScreen() {
   const images = getImages();
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
       {/* Image Gallery */}
       <View style={styles.imageContainer}>
         <Image 

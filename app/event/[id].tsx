@@ -271,7 +271,7 @@ export default function EventDetailsScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.imageContainer}>
         <Image
           source={event.image_url ? { uri: event.image_url } : require('../../assets/images/icon.png')}

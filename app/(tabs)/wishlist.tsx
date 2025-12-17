@@ -2,23 +2,23 @@ import SelectiveWishlistItemCard from '@/components/selective-wishlist-item-card
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
-  WishlistItem,
-  getUserWishlistItems,
-  removeFromWishlist,
-  subscribeToWishlistChanges,
+    WishlistItem,
+    getUserWishlistItems,
+    removeFromWishlist,
+    subscribeToWishlistChanges,
 } from '@/services/selectiveWishlist';
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 export default function WishlistScreen() {
@@ -181,6 +181,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingVertical: 16,
+    paddingBottom: 90,
   },
   header: {
     fontSize: 24,

@@ -244,6 +244,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     padding: 16,
+    paddingBottom: 32,
     gap: 12,
     borderTopWidth: 1,
   },

@@ -425,6 +425,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingVertical: 16,
+    paddingBottom: 90,
   },
   headerRow: {
     paddingHorizontal: 16,

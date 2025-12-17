@@ -470,7 +470,7 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, padding: 16, paddingBottom: 24 },
+  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, padding: 16, paddingBottom: 32 },
   heading: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   typeRow: { flexDirection: 'row', marginBottom: 12 },
   typeButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginRight: 8 },
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
   inputMultiline: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10, minHeight: 80 },
   actionsContainer: { 
     paddingTop: 12, 
-    paddingBottom: 20, 
+    paddingBottom: 32, 
     borderTopWidth: 1, 
     borderTopColor: 'rgba(0,0,0,0.05)' 
   },
