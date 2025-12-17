@@ -5,7 +5,9 @@ import { supabase } from '@/services/supabase';
 import { FontAwesome } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import React, { useState } from 'react';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 
@@ -29,6 +31,14 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [latInput, setLatInput] = useState('');
+  const [lngInput, setLngInput] = useState('');
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 15.8497,
+    longitude: 74.4977,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
 
   const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !selectedLocation || !imageUrl;
 
@@ -170,6 +180,48 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
 
   const removePhoto = () => {
     setImageUrl(null);
+  };
+
+  const handleManualLocationSave = () => {
+    const lat = parseFloat(latInput);
+    const lng = parseFloat(lngInput);
+    if (isNaN(lat) || isNaN(lng)) {
+      Alert.alert('Invalid coordinates', 'Please enter valid latitude and longitude values.');
+      return;
+    }
+    setSelectedLocation({ latitude: lat, longitude: lng });
+  };
+
+  const handleUseCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Location permission is required to use current location.');
+        return;
+      }
+      
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+      
+      setSelectedLocation({ latitude, longitude });
+      setLatInput(latitude.toString());
+      setLngInput(longitude.toString());
+      setMapRegion({
+        latitude,
+        longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to get current location: ' + error.message);
+    }
+  };
+
+  const handleMapPress = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setSelectedLocation({ latitude, longitude });
+    setLatInput(latitude.toString());
+    setLngInput(longitude.toString());
   };
 
   const submit = async () => {
@@ -402,42 +454,42 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
             <TextInput placeholder="Description" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} style={[styles.inputMultiline, { color: colors.text, borderColor: colors.cardBorder }]} multiline numberOfLines={4} />
             <TextInput placeholder="Contact (WhatsApp)" placeholderTextColor={colors.textSecondary} value={contact} onChangeText={setContact} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
 
-            {/* Location Section (no Google Maps dependency) */}
-            <View style={[styles.mapFallback, { borderColor: colors.cardBorder, backgroundColor: colors.background, marginBottom: 16 }]}
-            >
-              <Text style={{ color: colors.text, marginBottom: 8, fontWeight: '600' }}>Set location</Text>
-              <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
-                Enter coordinates or use your current location. No map API key required.
+            {/* Location Section with Google Maps */}
+            <View style={[styles.mapSection, { borderColor: colors.cardBorder, backgroundColor: colors.background, marginBottom: 16 }]}>
+              <View style={styles.mapHeader}>
+                <Text style={{ color: colors.text, marginBottom: 8, fontWeight: '600' }}>Set Location</Text>
+                <TouchableOpacity 
+                  style={[styles.currentLocationBtn, { backgroundColor: colors.primary }]} 
+                  onPress={handleUseCurrentLocation}
+                >
+                  <FontAwesome name="location-arrow" size={14} color="#fff" />
+                  <Text style={styles.currentLocationText}>My Location</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <Text style={{ color: colors.textSecondary, marginBottom: 8, fontSize: 12 }}>
+                Tap on the map to select location
               </Text>
-              <View style={styles.manualRow}>
-                <TextInput
-                  style={[styles.manualInput, { borderColor: colors.cardBorder, color: colors.text }]}
-                  placeholder="Latitude"
-                  placeholderTextColor={colors.textSecondary}
-                  value={latInput}
-                  onChangeText={setLatInput}
-                  keyboardType="decimal-pad"
-                />
-                <TextInput
-                  style={[styles.manualInput, { borderColor: colors.cardBorder, color: colors.text }]}
-                  placeholder="Longitude"
-                  placeholderTextColor={colors.textSecondary}
-                  value={lngInput}
-                  onChangeText={setLngInput}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-              <View style={styles.manualActions}>
-                <TouchableOpacity style={[styles.manualButton, { borderColor: colors.cardBorder }]} onPress={handleManualLocationSave}>
-                  <Text style={{ color: colors.text }}>Save coords</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.manualButton, { borderColor: colors.cardBorder }]} onPress={handleUseCurrentLocation}>
-                  <Text style={{ color: colors.primary }}>Use my location</Text>
-                </TouchableOpacity>
-              </View>
+              
+              <MapView
+                provider={PROVIDER_GOOGLE}
+                style={styles.map}
+                region={mapRegion}
+                onPress={handleMapPress}
+                showsUserLocation
+                showsMyLocationButton={false}
+              >
+                {selectedLocation && (
+                  <Marker
+                    coordinate={selectedLocation}
+                    title="Selected Location"
+                  />
+                )}
+              </MapView>
+              
               {selectedLocation && (
-                <Text style={{ color: colors.textSecondary, marginTop: 6 }}>
-                  Selected: {selectedLocation.latitude.toFixed(5)}, {selectedLocation.longitude.toFixed(5)}
+                <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 12 }}>
+                  📍 {selectedLocation.latitude.toFixed(5)}, {selectedLocation.longitude.toFixed(5)}
                 </Text>
               )}
             </View>
@@ -566,34 +618,34 @@ const styles = StyleSheet.create({
   inputMultiline: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10, minHeight: 80 },
   actionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   button: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
-  mapFallback: {
-    flex: 1,
+  
+  // Map styles
+  mapSection: {
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
   },
-  manualRow: {
+  mapHeader: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  manualInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  manualActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 4,
-  },
-  manualButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 10,
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  currentLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  currentLocationText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  map: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
   },
 });

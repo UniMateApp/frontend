@@ -18,6 +18,9 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus.",
         "NSLocationWhenInUseUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus.",
         "NSLocationAlwaysUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus, even when the app is in the background."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyAFLZwZsfHG-ycWZG76oA23oxhNReHoQcI"
       }
     },
     "android": {
@@ -36,7 +39,12 @@
         "VIBRATE",
         "WAKE_LOCK"
       ],
-      "package": "com.anonymous.unimate"
+      "package": "com.anonymous.unimate",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAFLZwZsfHG-ycWZG76oA23oxhNReHoQcI"
+        }
+      }
     },
     "web": {
       "output": "static",
