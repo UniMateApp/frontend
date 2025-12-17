@@ -47,17 +47,32 @@ export default function MapScreen() {
         initialRegion={{
           latitude: currentLocation?.latitude || 15.8700,
           longitude: currentLocation?.longitude || 75.4370,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
         }}
-        showsUserLocation
-        showsMyLocationButton
+        minZoomLevel={10}
+        maxZoomLevel={20}
+        showsUserLocation={true}
+        showsMyLocationButton={true}
+        showsCompass={false}
+        showsScale={false}
+        showsTraffic={false}
+        showsBuildings={false}
+        showsIndoors={false}
+        zoomEnabled={true}
+        scrollEnabled={true}
+        pitchEnabled={false}
+        rotateEnabled={false}
+        loadingEnabled={false}
+        cacheEnabled={true}
+        toolbarEnabled={false}
       >
         {currentLocation && (
           <Marker
             coordinate={currentLocation}
             title="You are here"
             description="Your current location"
+            tracksViewChanges={false}
           />
         )}
       </MapView>

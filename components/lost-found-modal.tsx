@@ -453,11 +453,11 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
                   <MapView
                     provider={PROVIDER_GOOGLE}
                     style={styles.map}
-                    region={{
+                    initialRegion={{
                       latitude: selectedLocation.latitude,
                       longitude: selectedLocation.longitude,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
                     }}
                     onPress={(e) => {
                       const { latitude, longitude } = e.nativeEvent.coordinate;
@@ -465,11 +465,29 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
                       setLatInput(latitude.toFixed(6));
                       setLngInput(longitude.toFixed(6));
                     }}
+                    liteMode={true}
+                    minZoomLevel={12}
+                    maxZoomLevel={18}
+                    showsUserLocation={false}
+                    showsMyLocationButton={false}
+                    showsCompass={false}
+                    showsScale={false}
+                    showsTraffic={false}
+                    showsBuildings={false}
+                    showsIndoors={false}
+                    zoomEnabled={true}
+                    scrollEnabled={true}
+                    pitchEnabled={false}
+                    rotateEnabled={false}
+                    loadingEnabled={false}
+                    cacheEnabled={true}
+                    toolbarEnabled={false}
                   >
                     <Marker
                       coordinate={selectedLocation}
                       title="Selected Location"
                       description="Tap on map to change"
+                      tracksViewChanges={false}
                     />
                   </MapView>
                   <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 12 }}>
@@ -664,12 +682,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   mapContainer: {
-    marginBottom: 12,
-  },
-  map: {
     width: '100%',
     height: 200,
+    marginBottom: 12,
     borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#e0e0e0',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
   mapPlaceholder: {
     width: '100%',
