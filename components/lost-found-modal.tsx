@@ -7,7 +7,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import MapLocationPicker from './map-location-picker';
 
 
@@ -297,9 +297,19 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
-        <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
-          <ScrollView showsVerticalScrollIndicator={false}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardView}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
+              <ScrollView 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.scrollContent}
+              >
             <Text style={[styles.heading, { color: colors.text }]}>New {type} Post</Text>
 
             <View style={styles.typeRow}>
@@ -439,9 +449,9 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
                 <FontAwesome name="chevron-right" size={14} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
-          </ScrollView>
+              </ScrollView>
 
-          <View style={styles.actionsContainer}>
+              <View style={styles.actionsContainer}>
             <View style={styles.actionsRow}>
               <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
                 <Text style={{ color: colors.text }}>Cancel</Text>
@@ -453,24 +463,28 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
                 <Text style={{ color: '#fff' }}>Post</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
 
-        {/* Map Location Picker Modal */}
-        <MapLocationPicker
-          visible={showMapPicker}
-          onClose={() => setShowMapPicker(false)}
-          onSelectLocation={(location) => setSelectedLocation(location)}
-          initialLocation={selectedLocation || undefined}
-        />
-      </View>
+          {/* Map Location Picker Modal */}
+          <MapLocationPicker
+            visible={showMapPicker}
+            onClose={() => setShowMapPicker(false)}
+            onSelectLocation={(location) => setSelectedLocation(location)}
+            initialLocation={selectedLocation || undefined}
+          />
+        </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, padding: 16, paddingBottom: 32 },
+  keyboardView: { width: '100%' },
+  scrollContent: { flexGrow: 1, paddingTop: 20, paddingBottom: 300, paddingHorizontal: 16 },
+  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, paddingBottom: 0 },
   heading: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   typeRow: { flexDirection: 'row', marginBottom: 12 },
   typeButton: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginRight: 8 },

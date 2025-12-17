@@ -2,7 +2,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
 type Props = {
   visible: boolean;
@@ -83,9 +83,19 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
-      <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
-        <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
-          <ScrollView contentContainerStyle={styles.content}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardView}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
+              <ScrollView 
+                contentContainerStyle={styles.content}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
             <Text style={[styles.heading, { color: colors.text }]}>Add Event</Text>
 
             <TextInput placeholder="Title" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
@@ -121,31 +131,43 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
             <TextInput placeholder="Location" placeholderTextColor={colors.textSecondary} value={location} onChangeText={setLocation} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Price (Free/Paid)" placeholderTextColor={colors.textSecondary} value={price} onChangeText={setPrice} style={[styles.input, { color: colors.text, borderColor: colors.cardBorder }]} />
             <TextInput placeholder="Short description" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} style={[styles.inputMultiline, { color: colors.text, borderColor: colors.cardBorder }]} multiline numberOfLines={3} />
+              </ScrollView>
 
-            <View style={styles.actionsRow}>
-              <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
-                <Text style={{ color: colors.text }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={submit}>
-                <Text style={{ color: '#fff' }}>Add Event</Text>
-              </TouchableOpacity>
+              <View style={styles.actionsContainer}>
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity style={[styles.button, { backgroundColor: colors.cardBorder }]} onPress={onClose}>
+                    <Text style={{ color: colors.text }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={submit}>
+                    <Text style={{ color: '#fff' }}>Add Event</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </View>
+    </TouchableWithoutFeedback>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { maxHeight: '85%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1 },
-  content: { padding: 16, paddingBottom: 32 },
+  keyboardView: { width: '100%' },
+  sheet: { maxHeight: '90%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1 },
+  content: { padding: 16, paddingTop: 20, paddingBottom: 300 },
   heading: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 4 },
   input: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
   inputMultiline: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10, minHeight: 80 },
   pickerButton: { justifyContent: 'center' },
-  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  button: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
+  actionsContainer: { 
+    paddingHorizontal: 16,
+    paddingTop: 12, 
+    paddingBottom: 32, 
+    borderTopWidth: 1, 
+    borderTopColor: 'rgba(0,0,0,0.05)' 
+  },
+  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  button: { flex: 1, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
 });
