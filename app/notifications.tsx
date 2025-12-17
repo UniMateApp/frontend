@@ -1,12 +1,14 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getNotificationsForCurrentUser, markAllNotificationsReadForCurrentUser, markNotificationRead, subscribeToNotifications } from '@/services/notifications';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, DeviceEventEmitter, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function NotificationsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const router = useRouter();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,14 +57,22 @@ export default function NotificationsScreen() {
 
   const handlePress = async (item: any) => {
     try {
-      // show details and mark as read if unread
-      Alert.alert(item.title || 'Notification', item.message || '');
+      // Mark as read
       if (!item.read) {
         await markNotificationRead(item.id);
         setNotifications(prev => prev.map(n => (n.id === item.id ? { ...n, read: true } : n)));
       }
+
+      // Handle different notification types
+      if (item.type === 'chat' && item.data?.sender_id) {
+        // Navigate to the chat with the sender
+        router.push({ pathname: `/chat/${item.data.sender_id}` });
+      } else {
+        // For other notification types, just show an alert
+        Alert.alert(item.title || 'Notification', item.message || '');
+      }
     } catch (err: any) {
-      console.error('Failed to mark notification read', err);
+      console.error('Failed to handle notification', err);
     }
   };
 

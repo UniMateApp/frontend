@@ -81,6 +81,14 @@ export default function RootLayout() {
               }} 
             />
             <Stack.Screen
+              name="chats"
+              options={{
+                title: 'Chats',
+                headerShown: true,
+                headerBackTitle: 'Back',
+              }}
+            />
+            <Stack.Screen
               name="chat/[otherUserId]"
               options={{
                 title: 'Chat',

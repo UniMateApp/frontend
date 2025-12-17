@@ -96,6 +96,14 @@ export default function AppHeader() {
 
         <View style={styles.right}>
           <TouchableOpacity
+            onPress={() => router.push({ pathname: '/chats' })}
+            accessibilityLabel="Open chats"
+            style={styles.iconButton}
+          >
+            <FontAwesome name="comments" size={20} color={colors.icon} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={() => router.push({ pathname: '/map' })}
             accessibilityLabel="Open map"
             style={styles.iconButton}

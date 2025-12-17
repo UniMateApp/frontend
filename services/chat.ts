@@ -102,16 +102,53 @@ export async function getUnreadCounts(currentUserId: string) {
   const ids = (conversations || []).map((c: any) => c.id);
   if (!ids.length) return [] as { conversation_id: string; count: number }[];
 
+  // Fetch all unread messages and count them per conversation in JavaScript
   const { data, error } = await client
     .from('messages')
-    .select('conversation_id, count:id')
+    .select('conversation_id')
     .eq('is_read', false)
     .neq('sender_id', currentUserId)
-    .in('conversation_id', ids)
-    .group('conversation_id');
+    .in('conversation_id', ids);
 
   if (error) throw error;
-  return data as { conversation_id: string; count: number }[];
+  
+  // Group by conversation_id in JavaScript
+  const counts = (data || []).reduce((acc: any, msg: any) => {
+    const convId = msg.conversation_id;
+    acc[convId] = (acc[convId] || 0) + 1;
+    return acc;
+  }, {});
+  
+  return Object.entries(counts).map(([conversation_id, count]) => ({ 
+    conversation_id, 
+    count: count as number 
+  }));
+}
+
+export async function getUserConversations(currentUserId: string) {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('conversations')
+    .select('*')
+    .or(`participant1.eq.${currentUserId},participant2.eq.${currentUserId}`)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  return (data as Conversation[]) || [];
+}
+
+export async function getLastMessageForConversation(conversationId: string): Promise<Message | null> {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  
+  if (error) throw error;
+  return data as Message | null;
 }
 
 export function subscribeToMessages(
