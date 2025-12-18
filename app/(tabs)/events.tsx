@@ -333,7 +333,7 @@ export default function EventsScreen() {
       <View style={styles.headerRow}>
         <View>
           <Text style={[styles.title, { color: colors.text }]}>Events</Text>
-          <Text style={{ color: colors.textSecondary }}>{eventsWithWishlist.length} events available</Text>
+          <Text style={{ color: colors.textSecondary }}>{events.length} events available</Text>
         </View>
 
         <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={() => setShowAdd(true)}>

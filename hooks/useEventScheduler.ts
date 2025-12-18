@@ -4,8 +4,8 @@
  */
 
 import {
-    configureNotificationHandler,
-    requestNotificationPermissions,
+  configureNotificationHandler,
+  requestNotificationPermissions,
 } from '@/services/backgroundScheduler';
 import { cacheEventsForBackground } from '@/services/backgroundTaskService';
 import { checkAndNotifyEvents } from '@/services/immediateNotifier';
@@ -153,7 +153,10 @@ export function useEventScheduler(
           .map((e) => ({
             id: e.id,
             title: e.title,
-            location: e.location || 'campus',
+            location: e.location || '',
+            latitude: e.latitude,
+            longitude: e.longitude,
+            location_name: e.location_name,
             start_at: e.start_at!,
           }))
       );

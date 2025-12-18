@@ -1,9 +1,16 @@
 /**
  * Immediate location-based notification service
- * Checks if user is within campus radius and sends notifications immediately
+ * Checks if user is within each event's location radius and sends notifications immediately
+ * 
+ * Flow:
+ * 1. Get user's live GPS location once
+ * 2. For each event with coordinates (latitude/longitude):
+ *    - Calculate distance between user location and event location
+ *    - If within NOTIFICATION_RADIUS_KM and event is starting soon, send notification
+ * 3. Track notified events to prevent duplicate notifications
  */
 
-import { CAMPUS_COORDINATES, NOTIFICATION_RADIUS_KM, REMINDER_TIME_BEFORE_EVENT_MINUTES } from '@/constants/campus';
+import { NOTIFICATION_RADIUS_KM, REMINDER_TIME_BEFORE_EVENT_MINUTES } from '@/constants/campus';
 import { Event } from '@/services/selectiveWishlist';
 import { calculateHaversineDistance } from '@/utils/distance';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -79,9 +86,9 @@ export async function cleanupOldNotifications(): Promise<void> {
 }
 
 /**
- * Check if user is currently within campus radius
+ * Get user's current location
  */
-async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; distance: number | null; location: Location.LocationObject | null }> {
+async function getUserLocation(): Promise<{ latitude: number; longitude: number } | null> {
   try {
     console.log('[ImmediateNotifier] 📍 Getting user location...');
     
@@ -89,14 +96,14 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
     const isEnabled = await Location.hasServicesEnabledAsync();
     if (!isEnabled) {
       console.warn('[ImmediateNotifier] ⚠️ Location services are disabled on device');
-      return { withinRadius: false, distance: null, location: null };
+      return null;
     }
 
     // Check if location permission is granted
     const { status } = await Location.getForegroundPermissionsAsync();
     if (status !== 'granted') {
       console.warn('[ImmediateNotifier] ⚠️ Location permission not granted');
-      return { withinRadius: false, distance: null, location: null };
+      return null;
     }
 
     // Get current location with timeout
@@ -114,27 +121,8 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
     const userLng = location.coords.longitude;
 
     console.log('[ImmediateNotifier] User location:', { lat: userLat, lng: userLng });
-    console.log('[ImmediateNotifier] Event Location:', CAMPUS_COORDINATES);
 
-    // Calculate distance to campus
-    const distance = calculateHaversineDistance(
-      userLat,
-      userLng,
-      CAMPUS_COORDINATES.latitude,
-      CAMPUS_COORDINATES.longitude
-    );
-
-    console.log(`[ImmediateNotifier] Distance to campus: ${distance.toFixed(2)} km`);
-
-    const withinRadius = distance <= NOTIFICATION_RADIUS_KM;
-    
-    if (withinRadius) {
-      console.log('[ImmediateNotifier] ✅ User is within campus radius!');
-    } else {
-      console.log(`[ImmediateNotifier] ⚠️ User is outside campus radius (${NOTIFICATION_RADIUS_KM} km)`);
-    }
-
-    return { withinRadius, distance, location };
+    return { latitude: userLat, longitude: userLng };
   } catch (error: any) {
     if (error.message === 'Location request timeout') {
       console.warn('[ImmediateNotifier] ⚠️ Location request timed out - location services may be slow or unavailable');
@@ -144,8 +132,28 @@ async function isUserWithinCampusRadius(): Promise<{ withinRadius: boolean; dist
     } else {
       console.warn('[ImmediateNotifier] ⚠️ Error checking user location:', error.message || error);
     }
-    return { withinRadius: false, distance: null, location: null };
+    return null;
   }
+}
+
+/**
+ * Check if user is within radius of a specific event location
+ */
+function isUserWithinEventRadius(
+  userLocation: { latitude: number; longitude: number },
+  eventLatitude: number,
+  eventLongitude: number
+): { withinRadius: boolean; distance: number } {
+  const distance = calculateHaversineDistance(
+    userLocation.latitude,
+    userLocation.longitude,
+    eventLatitude,
+    eventLongitude
+  );
+
+  const withinRadius = distance <= NOTIFICATION_RADIUS_KM;
+  
+  return { withinRadius, distance };
 }
 
 /**
@@ -183,14 +191,17 @@ async function sendNotificationForEvent(event: Event, distance: number): Promise
   try {
     console.log(`[ImmediateNotifier] 📨 Sending notification for: "${event.title}"`);
     
+    const locationName = event.location_name || event.location || 'the event location';
+    
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '📍 Event Starting Soon!',
-        body: `"${event.title}" is starting soon at ${event.location || 'campus'}! You're ${distance.toFixed(2)} km away.`,
+        body: `"${event.title}" is starting soon at ${locationName}! You're ${distance.toFixed(2)} km away.`,
         data: {
           eventId: event.id,
           eventTitle: event.title,
           eventLocation: event.location,
+          eventLocationName: event.location_name,
           eventTime: event.start_at,
           distance: distance,
         },
@@ -218,25 +229,27 @@ export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
     // Clean up old notifications
     await cleanupOldNotifications();
 
-    // Check if user is within campus radius
-    const { withinRadius, distance } = await isUserWithinCampusRadius();
+    // Get user's current location once
+    const userLocation = await getUserLocation();
     
-    if (!withinRadius) {
-      console.log('[ImmediateNotifier] User not within campus radius, no notifications sent');
+    if (!userLocation) {
+      console.warn('[ImmediateNotifier] Could not get user location, skipping notifications');
       return;
     }
 
-    if (distance === null) {
-      console.warn('[ImmediateNotifier] Could not determine distance, skipping notifications');
-      return;
-    }
-
-    // Check each event
+    // Check each event against user's location
     let notificationsSent = 0;
     for (const event of events) {
       // Skip if no start time
       if (!event.start_at) {
         console.log(`[ImmediateNotifier] ⚠️ Event "${event.title}" has no start time, skipping`);
+        continue;
+      }
+
+      // Skip if event has no coordinates
+      if (event.latitude === undefined || event.latitude === null || 
+          event.longitude === undefined || event.longitude === null) {
+        console.log(`[ImmediateNotifier] ⚠️ Event "${event.title}" has no location coordinates, skipping`);
         continue;
       }
 
@@ -247,18 +260,37 @@ export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
       }
 
       // Check if event is starting soon
-      if (isEventStartingSoon(event.start_at)) {
-        console.log(`[ImmediateNotifier] ✅ Event "${event.title}" is eligible for notification`);
+      if (!isEventStartingSoon(event.start_at)) {
+        const eventDate = new Date(event.start_at);
+        const now = new Date();
+        const timeDiffMinutes = (eventDate.getTime() - now.getTime()) / (1000 * 60);
+        console.log(`[ImmediateNotifier] Event "${event.title}" not in notification window (starts in ${timeDiffMinutes.toFixed(1)} min)`);
+        continue;
+      }
+
+      // Check if user is within radius of this event's location
+      const { withinRadius, distance } = isUserWithinEventRadius(
+        userLocation,
+        event.latitude,
+        event.longitude
+      );
+
+      console.log(`[ImmediateNotifier] Event "${event.title}" location:`, {
+        lat: event.latitude,
+        lng: event.longitude,
+        locationName: event.location_name || event.location,
+      });
+      console.log(`[ImmediateNotifier] Distance to event: ${distance.toFixed(2)} km`);
+
+      if (withinRadius) {
+        console.log(`[ImmediateNotifier] ✅ User is within ${NOTIFICATION_RADIUS_KM} km of event "${event.title}"`);
         
         // Send notification
         await sendNotificationForEvent(event, distance);
         await markEventAsNotified(event.id);
         notificationsSent++;
       } else {
-        const eventDate = new Date(event.start_at);
-        const now = new Date();
-        const timeDiffMinutes = (eventDate.getTime() - now.getTime()) / (1000 * 60);
-        console.log(`[ImmediateNotifier] Event "${event.title}" not in notification window (starts in ${timeDiffMinutes.toFixed(1)} min)`);
+        console.log(`[ImmediateNotifier] ⚠️ User is outside ${NOTIFICATION_RADIUS_KM} km radius of event "${event.title}"`);
       }
     }
 
@@ -297,9 +329,9 @@ export async function sendTestNotification(): Promise<void> {
 }
 
 /**
- * Force check location and send notification (for testing)
+ * Force check location and return user coordinates (for testing)
  */
-export async function forceCheckLocation(): Promise<{ withinRadius: boolean; distance: number | null }> {
-  const result = await isUserWithinCampusRadius();
-  return { withinRadius: result.withinRadius, distance: result.distance };
+export async function forceCheckLocation(): Promise<{ userLocation: { latitude: number; longitude: number } | null }> {
+  const userLocation = await getUserLocation();
+  return { userLocation };
 }

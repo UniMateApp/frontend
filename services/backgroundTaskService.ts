@@ -18,6 +18,9 @@ interface CachedEvent {
   id: string;
   title: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
+  location_name?: string;
   start_at: string;
 }
 
@@ -174,15 +177,18 @@ TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async ({ error }: any) => {
       if (isEventStartingIn2Minutes(event.start_at)) {
         console.log('[BackgroundTask] 📨 Sending notification for:', event.title);
 
-        // Send notification - simple message with static distance
+        const locationName = event.location_name || event.location || 'the event location';
+
+        // Send notification
         await Notifications.scheduleNotificationAsync({
           content: {
             title: '📍 Event Starting Soon!',
-            body: `"${event.title}" is starting in 2 minutes at ${event.location || 'campus'}! You're 1.2 km away.`,
+            body: `"${event.title}" is starting in 2 minutes at ${locationName}!`,
         data: {
               eventId: event.id,
               eventTitle: event.title,
               eventLocation: event.location,
+              eventLocationName: event.location_name,
               eventTime: event.start_at,
             },
             sound: true,
