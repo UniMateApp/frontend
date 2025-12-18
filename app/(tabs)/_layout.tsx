@@ -4,9 +4,14 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
+  const baseHeight = 64;
+  const tabBarPaddingBottom = Math.max(insets.bottom, 10);
+  const tabBarHeight = baseHeight + tabBarPaddingBottom;
 
   return (
     <>
@@ -16,7 +21,12 @@ export default function TabLayout() {
           headerShown: false,
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tabIconSelected,
           tabBarInactiveTintColor: Colors[colorScheme ?? 'light'].tabIconDefault,
-          tabBarStyle: { height: 64, paddingBottom: 8, backgroundColor: Colors[colorScheme ?? 'light'].background },
+          tabBarStyle: {
+            height: tabBarHeight,
+            paddingBottom: tabBarPaddingBottom,
+            paddingTop: 6,
+            backgroundColor: Colors[colorScheme ?? 'light'].background,
+          },
           tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
           tabBarIconStyle: { marginBottom: -4 },
         })}

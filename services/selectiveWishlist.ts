@@ -19,10 +19,15 @@ export interface Event {
   category?: string;
   organizer?: string;
   start_at?: string;
+  end_at?: string;
   location?: string;
+  latitude?: number;
+  longitude?: number;
+  location_name?: string;
   price?: number;
   image_url?: string;
-  attendees?: number;
+  attendees?: any[];
+  registration_deadline?: string;
   created_by?: string;
   created_at: string;
   updated_at: string;
@@ -75,13 +80,11 @@ export async function getUserWishlistItems(): Promise<WishlistItem[]> {
       .order('added_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching wishlist items:', error);
       throw error;
     }
 
     return data || [];
   } catch (error) {
-    console.error('getUserWishlistItems error:', error);
     throw error;
   }
 }
@@ -89,15 +92,12 @@ export async function getUserWishlistItems(): Promise<WishlistItem[]> {
 // Add an event to the user's wishlist
 export async function addEventToWishlist(eventId: string): Promise<string> {
   try {
-    console.log('[Wishlist] Adding event to wishlist:', eventId);
     const client = await getSupabase();
     const { data: { user } } = await client.auth.getUser();
     
     if (!user) {
       throw new Error('User not authenticated');
     }
-
-    console.log('[Wishlist] User authenticated:', user.id);
     
     // Use the database function to add event to wishlist
     const { data, error } = await client
@@ -107,14 +107,11 @@ export async function addEventToWishlist(eventId: string): Promise<string> {
       if (error.code === '23505') { // Unique constraint violation
         throw new Error('Event is already in your wishlist');
       }
-      console.error('[Wishlist] Error adding event to wishlist:', error);
       throw error;
     }
 
-    console.log('[Wishlist] Successfully added event to wishlist, returned ID:', data);
     return data; // Returns the wishlist item ID
   } catch (error) {
-    console.error('addEventToWishlist error:', error);
     throw error;
   }
 }
@@ -137,13 +134,11 @@ export async function addLostFoundToWishlist(lostFoundId: string): Promise<strin
       if (error.code === '23505') { // Unique constraint violation
         throw new Error('Item is already in your wishlist');
       }
-      console.error('Error adding lost-and-found item to wishlist:', error);
       throw error;
     }
 
     return data; // Returns the wishlist item ID
   } catch (error) {
-    console.error('addLostFoundToWishlist error:', error);
     throw error;
   }
 }
@@ -165,11 +160,9 @@ export async function removeFromWishlist(wishlistItemId: string): Promise<void> 
       .eq('profile_id', user.id); // Ensure user can only delete their own items
 
     if (error) {
-      console.error('Error removing from wishlist:', error);
       throw error;
     }
   } catch (error) {
-    console.error('removeFromWishlist error:', error);
     throw error;
   }
 }
@@ -177,15 +170,12 @@ export async function removeFromWishlist(wishlistItemId: string): Promise<void> 
 // Remove item by type and item_id (alternative method)
 export async function removeItemFromWishlist(itemType: 'event' | 'lost_found', itemId: string): Promise<void> {
   try {
-    console.log('[Wishlist] Removing item from wishlist:', { itemType, itemId });
     const client = await getSupabase();
     const { data: { user } } = await client.auth.getUser();
     
     if (!user) {
       throw new Error('User not authenticated');
     }
-
-    console.log('[Wishlist] User authenticated for removal:', user.id);
 
     const { error } = await client
       .from('wishlist')
@@ -195,13 +185,9 @@ export async function removeItemFromWishlist(itemType: 'event' | 'lost_found', i
       .eq('item_id', itemId);
 
     if (error) {
-      console.error('[Wishlist] Error removing item from wishlist:', error);
       throw error;
     }
-    
-    console.log('[Wishlist] Successfully removed item from wishlist');
   } catch (error) {
-    console.error('removeItemFromWishlist error:', error);
     throw error;
   }
 }
@@ -225,13 +211,11 @@ export async function isEventInWishlist(eventId: string): Promise<boolean> {
       .single();
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('Error checking if event is in wishlist:', error);
       return false;
     }
 
     return !!data;
   } catch (error) {
-    console.error('isEventInWishlist error:', error);
     return false;
   }
 }
@@ -255,13 +239,11 @@ export async function isLostFoundInWishlist(lostFoundId: string): Promise<boolea
       .single();
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('Error checking if lost-and-found item is in wishlist:', error);
       return false;
     }
 
     return !!data;
   } catch (error) {
-    console.error('isLostFoundInWishlist error:', error);
     return false;
   }
 }
@@ -299,14 +281,11 @@ export async function getEventsWithWishlistStatus(): Promise<(Event & { isInWish
     }
 
     const wishlistEventIds = new Set((wishlistItems || []).map(item => item.item_id));
-    console.log('[Wishlist] Found wishlist event IDs:', Array.from(wishlistEventIds));
 
     const result = (events || []).map(event => ({
       ...event,
       isInWishlist: wishlistEventIds.has(String(event.id))
     }));
-    
-    console.log('[Wishlist] Events with wishlist status:', result.map(e => ({ id: e.id, title: e.title, isInWishlist: e.isInWishlist })));
     
     return result;
   } catch (error) {
@@ -321,10 +300,11 @@ export async function getLostFoundWithWishlistStatus(): Promise<(MappedLostFound
     const client = await getSupabase();
     const { data: { user } } = await client.auth.getUser();
     
-    // Get all lost-and-found items
+    // Get all *unresolved* lost-and-found items
     const { data: lostFoundItems, error: lostFoundError } = await client
       .from('lost_found')
       .select('*')
+      .eq('resolved', false)
       .order('created_at', { ascending: false });
 
     if (lostFoundError) {
@@ -412,7 +392,6 @@ export async function subscribeToWishlistChanges(
       subscription.unsubscribe();
     };
   } catch (error) {
-    console.error('subscribeToWishlistChanges error:', error);
     throw error;
   }
 }

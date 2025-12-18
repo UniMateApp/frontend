@@ -2,18 +2,35 @@ import { supabase as getSupabase } from './supabase';
 
 export async function signUpWithEmail(email: string, password: string, userData?: { full_name?: string }) {
   const client = await getSupabase();
-  return await client.auth.signUp({ 
-    email, 
-    password,
-    options: {
-      data: userData || {}
+  try {
+    return await client.auth.signUp({
+      email,
+      password,
+      options: {
+        data: userData || {},
+      },
+    });
+  } catch (err: any) {
+    console.error('[auth] signUpWithEmail error:', err);
+    // Surface actionable hint for common misconfiguration/network issues
+    if ((err?.message || '').toLowerCase().includes('json')) {
+      throw new Error('Auth signUp failed: received unexpected/non-JSON response. Check EXPO_PUBLIC_SUPABASE_URL/KEY and network connectivity.');
     }
-  });
+    throw err;
+  }
 }
 
 export async function signInWithEmail(email: string, password: string) {
   const client = await getSupabase();
-  return await client.auth.signInWithPassword({ email, password });
+  try {
+    return await client.auth.signInWithPassword({ email, password });
+  } catch (err: any) {
+    console.error('[auth] signInWithEmail error:', err);
+    if ((err?.message || '').toLowerCase().includes('json') || (err?.message || '').toLowerCase().includes('unexpected')) {
+      throw new Error('Auth signIn failed: received unexpected/non-JSON response. Check EXPO_PUBLIC_SUPABASE_URL/KEY and network connectivity.');
+    }
+    throw err;
+  }
 }
 
 export async function signOut() {
@@ -37,13 +54,14 @@ export async function ensureUserProfile(user: any) {
     const client = await getSupabase();
     console.log('Ensuring profile for user:', user?.id, 'with metadata:', user?.user_metadata);
     
-    // Use upsert to create or update profile with user metadata
+    // Use upsert to create or update profile with user metadata and email
     const { data, error: upsertError } = await client
       .from('profiles')
       .upsert({
         id: user.id,
         full_name: user.user_metadata?.full_name || null,
         avatar_url: user.user_metadata?.avatar_url || null,
+        email: user.email || null,
       })
       .select();
     

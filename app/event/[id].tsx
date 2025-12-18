@@ -1,18 +1,21 @@
 import EditEventModal from '@/components/edit-event-modal';
 import { Colors } from '@/constants/theme';
+import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { deleteEvent, getEventById, updateEvent } from '@/services/events';
+import { getPlaceNameFromLatLng } from '@/services/geocode';
 import { addEventToWishlist, isEventInWishlist, removeItemFromWishlist } from '@/services/selectiveWishlist';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const { user } = useUser();
   
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +24,10 @@ export default function EventDetailsScreen() {
   const [updating, setUpdating] = useState(false);
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [geocodedLocation, setGeocodedLocation] = useState<string | null>(null);
+
+  // Check if current user is the event owner
+  const isOwner = Boolean(user && event?.created_by && String(user.id) === String(event.created_by));
 
   const fetchEvent = async () => {
     try {
@@ -28,6 +35,14 @@ export default function EventDetailsScreen() {
       setError(null);
       const eventData = await getEventById(String(id));
       setEvent(eventData);
+      
+      // Fetch location name from coordinates if available
+      if (eventData?.latitude && eventData?.longitude && !eventData?.location_name) {
+        const placeName = await getPlaceNameFromLatLng(eventData.latitude, eventData.longitude);
+        if (placeName) {
+          setGeocodedLocation(placeName);
+        }
+      }
       
       // Check if event is in wishlist
       try {
@@ -146,6 +161,88 @@ export default function EventDetailsScreen() {
       window.alert('RSVP functionality coming soon!');
     } else {
       Alert.alert('RSVP', 'RSVP functionality coming soon!');
+    }
+  };
+
+  const handleDirections = async () => {
+    // Try to get coordinates first, otherwise fallback to location name/address
+    const latitude = event?.latitude;
+    const longitude = event?.longitude;
+    const locationName = event?.location_name || event?.location;
+    const label = event?.title || 'Event Location';
+
+    // If no coordinates and no location name, show error
+    if (!latitude && !longitude && !locationName) {
+      const message = 'Event location is not available. Please contact the organizer.';
+      if (Platform.OS === 'web') {
+        window.alert(message);
+      } else {
+        Alert.alert('Location Unavailable', message);
+      }
+      return;
+    }
+
+    try {
+      if (Platform.OS === 'ios') {
+        // iOS: Open Apple Maps
+        let url;
+        if (latitude && longitude) {
+          // Use coordinates if available
+          url = `maps://app?daddr=${latitude},${longitude}&q=${encodeURIComponent(label)}`;
+        } else {
+          // Use location name/address as search query
+          url = `maps://app?q=${encodeURIComponent(locationName || label)}`;
+        }
+        
+        const canOpen = await Linking.canOpenURL(url);
+        if (canOpen) {
+          await Linking.openURL(url);
+        } else {
+          // Fallback to Google Maps web
+          if (latitude && longitude) {
+            await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
+          } else {
+            await Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationName || label)}`);
+          }
+        }
+      } else if (Platform.OS === 'android') {
+        // Android: Open Google Maps
+        let url;
+        if (latitude && longitude) {
+          // Use coordinates for navigation
+          url = `google.navigation:q=${latitude},${longitude}`;
+        } else {
+          // Use location name for search
+          url = `geo:0,0?q=${encodeURIComponent(locationName || label)}`;
+        }
+        
+        const canOpen = await Linking.canOpenURL(url);
+        if (canOpen) {
+          await Linking.openURL(url);
+        } else {
+          // Fallback to Google Maps web
+          if (latitude && longitude) {
+            await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
+          } else {
+            await Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationName || label)}`);
+          }
+        }
+      } else {
+        // Web: Open Google Maps in new tab
+        if (latitude && longitude) {
+          window.open(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`, '_blank');
+        } else {
+          window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationName || label)}`, '_blank');
+        }
+      }
+    } catch (error) {
+      console.error('Error opening directions:', error);
+      const message = 'Failed to open directions. Please try again.';
+      if (Platform.OS === 'web') {
+        window.alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
     }
   };
 
@@ -271,7 +368,7 @@ export default function EventDetailsScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.imageContainer}>
         <Image
           source={event.image_url ? { uri: event.image_url } : require('../../assets/images/icon.png')}
@@ -317,14 +414,14 @@ export default function EventDetailsScreen() {
           <View style={styles.infoItem}>
             <FontAwesome name="map-marker" size={16} color={colors.icon} />
             <Text style={[styles.infoText, { color: colors.text }]}>
-              {event.location || 'TBD'}
+              {event.location_name || geocodedLocation || event.location || 'TBD'}
             </Text>
           </View>
           {event.price !== null && event.price !== undefined && (
             <View style={styles.infoItem}>
               <FontAwesome name="tag" size={16} color={colors.icon} />
               <Text style={[styles.infoText, { color: colors.text }]}>
-                {event.price === 0 ? 'Free' : `$${event.price}`}
+                {event.price === 0 ? 'Free' : `LKR ${event.price.toFixed(2)}`}
               </Text>
             </View>
           )}
@@ -368,35 +465,51 @@ export default function EventDetailsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Admin Actions */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary, opacity: updating ? 0.6 : 1 }]}
-            onPress={() => {
-              console.log('Edit button pressed');
-              setShowEditModal(true);
-            }}
-            disabled={updating}
-            activeOpacity={0.7}>
-            <FontAwesome name="edit" size={20} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>{updating ? 'Updating...' : 'Edit Event'}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: '#e74c3c', opacity: updating ? 0.6 : 1 }]}
-            onPress={() => {
-              console.log('=== DELETE BUTTON PRESSED ===');
-              console.log('Event ID:', id);
-              console.log('Updating state:', updating);
-              handleDeleteEvent();
-            }}
-            disabled={updating}
-            activeOpacity={0.7}
-            testID="delete-button">
-            <FontAwesome name="trash" size={20} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>{updating ? 'Deleting...' : 'Delete'}</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Directions Button - Only visible to non-owners */}
+        {!isOwner && (
+          <View style={styles.directionsContainer}>
+            <TouchableOpacity
+              style={[styles.directionsButton, { backgroundColor: colors.primary }]}
+              onPress={handleDirections}
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="map-marker" size={20} color="#fff" style={styles.buttonIcon} />
+              <Text style={styles.directionsButtonText}>Get Directions</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Admin Actions - Only visible to event owner */}
+        {isOwner && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: colors.primary, opacity: updating ? 0.6 : 1 }]}
+              onPress={() => {
+                console.log('Edit button pressed');
+                setShowEditModal(true);
+              }}
+              disabled={updating}
+              activeOpacity={0.7}>
+              <FontAwesome name="edit" size={20} color="#fff" style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>{updating ? 'Updating...' : 'Edit Event'}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: '#e74c3c', opacity: updating ? 0.6 : 1 }]}
+              onPress={() => {
+                console.log('=== DELETE BUTTON PRESSED ===');
+                console.log('Event ID:', id);
+                console.log('Updating state:', updating);
+                handleDeleteEvent();
+              }}
+              disabled={updating}
+              activeOpacity={0.7}
+              testID="delete-button">
+              <FontAwesome name="trash" size={20} color="#fff" style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>{updating ? 'Deleting...' : 'Delete'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <EditEventModal
@@ -503,6 +616,21 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  directionsContainer: {
+    marginBottom: 24,
+  },
+  directionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+  },
+  directionsButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',

@@ -1,12 +1,15 @@
 import { Colors } from '@/constants/theme';
+import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { deleteLostFoundItem, getLostFoundItemById, resolveLostFoundItem } from '@/services/lostFound';
+import { getLostFoundItemById, resolveLostFoundItem } from '@/services/lostFound';
 import { addLostFoundToWishlist, isLostFoundInWishlist, removeItemFromWishlist } from '@/services/selectiveWishlist';
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 // Default image for lost and found items
 const DEFAULT_LOST_FOUND_IMAGE = require('@/assets/images/icon.png');
@@ -25,6 +28,105 @@ export default function LostFoundDetailsScreen() {
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const { user } = useUser();
+  const isOwner = Boolean(user && item && item.created_by && String(user.id) === String(item.created_by));
+  const [placeName, setPlaceName] = useState<string | null>(null);
+
+  // simple shared cache for geocoding results + AsyncStorage persistence
+  const geocodeCache = (global as any).__UM_GeocodeCache ||= new Map<string, string | null>();
+  const ASYNC_PREFIX = 'um:geocode:';
+
+  const getCachedPlaceAsync = async (key: string) => {
+    try {
+      if (geocodeCache.has(key)) return geocodeCache.get(key) ?? null;
+      const raw = await AsyncStorage.getItem(ASYNC_PREFIX + key);
+      if (raw != null) {
+        try {
+          const parsed = JSON.parse(raw);
+          geocodeCache.set(key, parsed);
+          return parsed;
+        } catch (e) {
+          geocodeCache.set(key, raw);
+          return raw;
+        }
+      }
+      return null;
+    } catch (e) {
+      console.warn('AsyncStorage read failed for geocode', e);
+      return null;
+    }
+  };
+
+  const setCachedPlaceAsync = async (key: string, value: string | null) => {
+    try {
+      geocodeCache.set(key, value);
+      await AsyncStorage.setItem(ASYNC_PREFIX + key, JSON.stringify(value));
+    } catch (e) {
+      console.warn('AsyncStorage write failed for geocode', e);
+    }
+  };
+
+  // reverse geocode when item is loaded
+  useEffect(() => {
+    let mounted = true;
+    if (!item?.location) return;
+    const parts = String(item.location).split(',').map((s: string) => s.trim());
+    if (parts.length < 2) return;
+    const lat = Number(parts[0]);
+    const lon = Number(parts[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const key = `${lat},${lon}`;
+
+    (async () => {
+      const cached = await getCachedPlaceAsync(key);
+      if (cached !== null) {
+        if (mounted) setPlaceName(cached);
+        return;
+      }
+
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=en`;
+      const headers: Record<string,string> = {
+        'Content-Type': 'application/json',
+        // Replace with your app/contact info in production
+        'User-Agent': 'Uni_Mate/1.0 (+https://your-app.example)',
+        'Referer': 'https://your-app.example'
+      };
+
+      let attempt = 0;
+      const maxAttempts = 3;
+      const backoff = (n: number) => new Promise(res => setTimeout(res, 200 * n));
+
+      while (attempt < maxAttempts) {
+        try {
+          const res = await fetch(url, { headers });
+          if (!res.ok) {
+            attempt++;
+            if (attempt >= maxAttempts) throw new Error(`Geocode request failed: ${res.status}`);
+            await backoff(attempt);
+            continue;
+          }
+          const data = await res.json();
+          const name = data?.name || data?.display_name || null;
+          await setCachedPlaceAsync(key, name);
+          console.debug && console.debug(`Geocode success: ${key} -> ${name}`);
+          if (mounted) setPlaceName(name);
+          return;
+        } catch (err) {
+          attempt++;
+          if (attempt >= maxAttempts) {
+            console.warn('Reverse geocode failed', err);
+            await setCachedPlaceAsync(key, null);
+            console.debug && console.debug(`Geocode failed: ${key} -> null (${String(err)})`);
+            if (mounted) setPlaceName(null);
+            return;
+          }
+          await backoff(attempt);
+        }
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [item?.location]);
 
   const fetchItem = async () => {
     try {
@@ -38,7 +140,6 @@ export default function LostFoundDetailsScreen() {
         const wishlistStatus = await isLostFoundInWishlist(String(id));
         setIsInWishlist(wishlistStatus);
       } catch (wishlistErr) {
-        console.warn('Could not check wishlist status:', wishlistErr);
         setIsInWishlist(false);
       }
     } catch (err: any) {
@@ -79,7 +180,6 @@ export default function LostFoundDetailsScreen() {
         setIsInWishlist(true);
       }
     } catch (error: any) {
-      console.error('Error toggling wishlist:', error);
       const isWeb = typeof window !== 'undefined' && (window as any).document != null;
       const message = error.message || 'Failed to update wishlist';
       
@@ -93,49 +193,27 @@ export default function LostFoundDetailsScreen() {
     }
   };
 
-  const handleResolve = async () => {
-    Alert.alert(
-      'Mark as Resolved',
-      'Are you sure you want to mark this item as resolved?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Resolve',
-          style: 'default',
-          onPress: async () => {
-            try {
-              setUpdating(true);
-              await resolveLostFoundItem(String(id));
-              await fetchItem(); // Refresh the item
-            } catch (error: any) {
-              console.error('Error resolving item:', error);
-              Alert.alert('Error', error.message || 'Failed to resolve item');
-            } finally {
-              setUpdating(false);
-            }
-          },
-        },
-      ]
-    );
-  };
+  // Removed separate "Resolve" action: Delete will now mark item as resolved.
 
   const handleDelete = async () => {
+    // Act like "resolve": mark the item as resolved (hidden) instead of permanently deleting
     Alert.alert(
-      'Delete Item',
-      'Are you sure you want to delete this item? This action cannot be undone.',
+      'Mark as Resolved',
+      'This will mark the item as resolved (it will be hidden). Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Mark Resolved',
           style: 'destructive',
           onPress: async () => {
             try {
               setUpdating(true);
-              await deleteLostFoundItem(String(id));
+              await resolveLostFoundItem(String(id));
+              // After resolving, go back to the previous screen
               router.back();
             } catch (error: any) {
-              console.error('Error deleting item:', error);
-              Alert.alert('Error', error.message || 'Failed to delete item');
+              console.error('Error marking item resolved:', error);
+              Alert.alert('Error', error.message || 'Failed to mark item as resolved');
               setUpdating(false);
             }
           },
@@ -167,6 +245,19 @@ export default function LostFoundDetailsScreen() {
     } catch (error) {
       console.error('Error sharing:', error);
     }
+  };
+
+  const handleChatWithPublisher = () => {
+    if (!item?.created_by) {
+      Alert.alert('Unavailable', 'Publisher information is missing for this post.');
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to chat with the publisher.');
+      return;
+    }
+    if (String(user.id) === String(item.created_by)) return;
+    router.push({ pathname: '/chat/[otherUserId]', params: { otherUserId: String(item.created_by) } });
   };
 
   const getImages = () => {
@@ -221,7 +312,7 @@ export default function LostFoundDetailsScreen() {
   const images = getImages();
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
       {/* Image Gallery */}
       <View style={styles.imageContainer}>
         <Image 
@@ -329,7 +420,7 @@ export default function LostFoundDetailsScreen() {
               <FontAwesome name="map-marker" size={16} color={colors.icon} />
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Location:</Text>
               <Text style={[styles.detailValue, { color: colors.text }]}>
-                {item.location}
+                {placeName ? `near ${placeName}` : item.location}
               </Text>
             </View>
           )}
@@ -345,6 +436,45 @@ export default function LostFoundDetailsScreen() {
           )}
         </View>
 
+        {/* Map View Section */}
+        {item.location && (() => {
+          const parts = String(item.location).split(',').map((s: string) => s.trim());
+          if (parts.length >= 2) {
+            const lat = Number(parts[0]);
+            const lon = Number(parts[1]);
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              return (
+                <View style={styles.section}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Location on Map</Text>
+                  <View style={styles.mapContainer}>
+                    <MapView
+                      provider={PROVIDER_GOOGLE}
+                      style={styles.map}
+                      initialRegion={{
+                        latitude: lat,
+                        longitude: lon,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01,
+                      }}
+                      scrollEnabled={true}
+                      zoomEnabled={true}
+                      pitchEnabled={false}
+                      rotateEnabled={false}
+                    >
+                      <Marker
+                        coordinate={{ latitude: lat, longitude: lon }}
+                        title={item.item_name}
+                        description={placeName || 'Item location'}
+                      />
+                    </MapView>
+                  </View>
+                </View>
+              );
+            }
+          }
+          return null;
+        })()}
+
         {/* Actions */}
         <View style={styles.actionsSection}>
           <TouchableOpacity 
@@ -355,37 +485,35 @@ export default function LostFoundDetailsScreen() {
             <Text style={[styles.shareText, { color: colors.primary }]}>Share</Text>
           </TouchableOpacity>
 
-          {!item.is_resolved && (
+          {!isOwner && (
+            <TouchableOpacity
+              style={[styles.resolveButton, { borderColor: colors.cardBorder }]}
+              onPress={handleChatWithPublisher}
+            >
+              <FontAwesome name="comments" size={16} color={colors.primary} />
+              <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Chat</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Resolve action removed: Delete now marks item as resolved */}
+
+          {/* Only the creator may mark the post resolved */}
+          {isOwner && (
             <TouchableOpacity 
-              style={[styles.resolveButton, { borderColor: colors.primary }]} 
-              onPress={handleResolve}
+              style={[styles.deleteButton, { borderColor: '#e74c3c' }]} 
+              onPress={handleDelete}
               disabled={updating}
             >
               {updating ? (
-                <ActivityIndicator size="small" color={colors.primary} />
+                <ActivityIndicator size="small" color="#e74c3c" />
               ) : (
                 <>
-                  <FontAwesome name="check" size={16} color={colors.primary} />
-                  <Text style={[styles.resolveButtonText, { color: colors.primary }]}>Resolve</Text>
+                  <FontAwesome name="trash-o" size={16} color="#e74c3c" />
+                  <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Mark Resolved</Text>
                 </>
               )}
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity 
-            style={[styles.deleteButton, { borderColor: '#e74c3c' }]} 
-            onPress={handleDelete}
-            disabled={updating}
-          >
-            {updating ? (
-              <ActivityIndicator size="small" color="#e74c3c" />
-            ) : (
-              <>
-                <FontAwesome name="trash-o" size={16} color="#e74c3c" />
-                <Text style={[styles.deleteButtonText, { color: '#e74c3c' }]}>Delete</Text>
-              </>
-            )}
-          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -549,6 +677,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
     fontWeight: '500',
+  },
+  mapContainer: {
+    height: 250,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  map: {
+    flex: 1,
   },
   actionsSection: {
     flexDirection: 'row',

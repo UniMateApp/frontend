@@ -2,7 +2,11 @@ import { supabase as getSupabase } from './supabase';
 
 export async function listEvents() {
   const supabase = await getSupabase();
-  const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('is_resolved', false)
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return data;
 }
@@ -38,6 +42,20 @@ export async function deleteEvent(id: any) {
     const supabase = await getSupabase();
     console.log('Supabase client obtained, attempting delete...');
     
+    // First, remove event from all wishlists
+    try {
+      const { error: wishlistError } = await supabase
+        .from('selective_wishlist')
+        .delete()
+        .eq('item_type', 'event')
+        .eq('item_id', String(id));
+      
+      // Continue with event deletion even if wishlist cleanup fails
+    } catch (wishlistErr) {
+      // Ignore wishlist cleanup errors
+    }
+    
+    // Then delete the event
     const { data, error } = await supabase
       .from('events')
       .delete()

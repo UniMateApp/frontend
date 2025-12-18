@@ -1,25 +1,50 @@
 {
   "expo": {
-    "name": "Uni_Mate",
+    "name": "UniMate",
     "slug": "Uni_Mate",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/unimate.png",
     "scheme": "unimate",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyBMt93P9MQHtpD9s62knVvMRlpInN7KIOo"
+      },
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus.",
+        "NSLocationWhenInUseUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus.",
+        "NSLocationAlwaysUsageDescription": "Allow Uni Mate to use your location to send event reminders when you're near campus, even when the app is in the background."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "foregroundImage": "./assets/images/unimate.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBMt93P9MQHtpD9s62knVvMRlpInN7KIOo"
+        }
+      },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ],
+      "package": "com.anonymous.unimate"
     },
     "web": {
       "output": "static",
@@ -28,15 +53,23 @@
     "plugins": [
       "expo-router",
       [
-        "expo-splash-screen",
+        "expo-location",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to send event reminders when you're near campus.",
+          "locationAlwaysPermission": "Allow $(PRODUCT_NAME) to use your location to send event reminders when you're near campus.",
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to send event reminders when you're near campus.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "Event Reminder"
         }
       ]
     ],

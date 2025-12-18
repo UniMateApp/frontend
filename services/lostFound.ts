@@ -5,7 +5,9 @@ export async function listLostFound() {
   const supabase = await getSupabase();
   const { data, error } = await supabase
     .from('lost_found')
+    // Only return unresolved items by default
     .select('*')
+    .eq('resolved', false)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -18,6 +20,8 @@ export async function getLostFoundItemById(id: string) {
   const { data, error } = await supabase
     .from('lost_found')
     .select('*')
+    // Only fetch if not resolved
+    .eq('resolved', false)
     .eq('id', id)
     .single();
 

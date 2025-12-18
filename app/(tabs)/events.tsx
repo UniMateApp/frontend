@@ -2,14 +2,23 @@ import AddEventModal from '@/components/add-event-modal';
 import { EventCard } from '@/components/event-card';
 import { SearchBar } from '@/components/search-bar';
 import { Colors } from '@/constants/theme';
+import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createEvent as apiCreateEvent, deleteEvent as apiDeleteEvent, listEvents as apiListEvents } from '@/services/events';
+import { useEventScheduler } from '@/hooks/useEventScheduler';
+import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService';
+import {
+  createEvent as apiCreateEvent,
+  deleteEvent as apiDeleteEvent,
+  listEvents as apiListEvents,
+} from '@/services/events';
+import { forceCheckLocation, sendTestNotification } from '@/services/immediateNotifier';
 import {
   Event,
   addEventToWishlist,
   getEventsWithWishlistStatus,
   removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
+import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -17,17 +26,62 @@ import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity,
 export default function EventsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const { user } = useUser();
   const [query, setQuery] = useState('');
   const [eventsWithWishlist, setEventsWithWishlist] = useState<(Event & { isInWishlist: boolean })[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const hasFocusedOnce = useRef(false);
+  const hasRequestedPermissions = useRef(false);
+  const [isBackgroundTaskActive, setIsBackgroundTaskActive] = useState(false);
+
+  // Initialize location-based event reminders
+  const {
+    isReady: isSchedulerReady,
+    hasNotificationPermission,
+    hasLocationPermission,
+    requestPermissions,
+  } = useEventScheduler(eventsWithWishlist, {
+    enabled: true,
+    autoSchedule: true, // Automatically schedule reminders when events change
+  });
+
+  // Request permissions on first load (only once)
+  useEffect(() => {
+    if (
+      !hasRequestedPermissions.current &&
+      (!hasNotificationPermission || !hasLocationPermission)
+    ) {
+      hasRequestedPermissions.current = true;
+      requestPermissions();
+    }
+  }, [hasNotificationPermission, hasLocationPermission, requestPermissions]);
+
+  // Check background task status
+  useEffect(() => {
+    const checkBackgroundTask = async () => {
+      const isRegistered = await isBackgroundTaskRegistered();
+      console.log('[Events] Background task registered:', isRegistered);
+      setIsBackgroundTaskActive(isRegistered);
+    };
+    checkBackgroundTask();
+  }, []);
 
   const events = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return eventsWithWishlist;
-    return eventsWithWishlist.filter((e: Event & { isInWishlist: boolean }) => 
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    
+    // Filter out events that started more than 4 hours ago
+    const activeEvents = eventsWithWishlist.filter((e: Event & { isInWishlist: boolean }) => {
+      if (!e.start_at) return true; // Keep events without a start time
+      const eventStart = new Date(e.start_at);
+      return eventStart >= fourHoursAgo;
+    });
+    
+    if (!q) return activeEvents;
+    return activeEvents.filter((e: Event & { isInWishlist: boolean }) => 
       (e.title + ' ' + (e.organizer || '') + ' ' + (e.location || '')).toLowerCase().includes(q)
     );
   }, [query, eventsWithWishlist]);
@@ -57,7 +111,6 @@ export default function EventsScreen() {
         )
       );
     } catch (error: any) {
-      console.error('Error toggling wishlist:', error);
       const isWeb = typeof window !== 'undefined' && (window as any).document != null;
       if (isWeb) {
         window.alert(error.message || 'Failed to update wishlist');
@@ -119,6 +172,60 @@ export default function EventsScreen() {
     }
   };
 
+  // Test notification functions
+  const handleTestNotification = async () => {
+    try {
+      await sendTestNotification();
+      Alert.alert('Success', 'Test notification sent! Check your notification tray.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send test notification');
+    }
+  };
+
+  const handleCheckLocation = async () => {
+    try {
+      // First check if location services are enabled (if available)
+      try {
+        const isEnabled = await Location.hasServicesEnabledAsync();
+        if (!isEnabled) {
+          Alert.alert(
+            'Location Services Disabled',
+            'Please enable location services in your device settings:\n\nSettings → Location → Turn on',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      } catch {
+        // hasServicesEnabledAsync might not be available, continue anyway
+        console.log('[Events] Location services check not available');
+      }
+
+      const { withinRadius, distance } = await forceCheckLocation();
+      Alert.alert(
+        'Location Check',
+        withinRadius
+          ? `✅ You are within campus radius!\nDistance: ${distance?.toFixed(2)} km`
+          : `⚠️ You are outside campus radius.\nDistance: ${distance?.toFixed(2)} km`
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to check location');
+    }
+  };
+
+  const handleToggleBackgroundTask = async () => {
+    try {
+      if (isBackgroundTaskActive) {
+        Alert.alert('Info', 'Background task is already running. It checks events every minute.');
+      } else {
+        await registerBackgroundTask();
+        setIsBackgroundTaskActive(true);
+        Alert.alert('Success', 'Background task started! Notifications will work even when app is closed.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to start background task');
+    }
+  };
+
   const handleDeleteEvent = (eventId: string, eventTitle: string) => {
     Alert.alert(
       'Delete Event',
@@ -155,13 +262,13 @@ export default function EventsScreen() {
 
       try {
         const eventsWithWishlistStatus = await getEventsWithWishlistStatus();
+        
         if (!shouldUpdate || shouldUpdate()) {
           setEventsWithWishlist(eventsWithWishlistStatus);
         }
       } catch (err: any) {
         if (!shouldUpdate || shouldUpdate()) {
           if (showLoader) {
-            console.error('Failed to load events with wishlist status', err);
             setError(err?.message || String(err));
             // Fallback to basic events without wishlist status
             try {
@@ -186,44 +293,18 @@ export default function EventsScreen() {
   );
 
 
-  const handleAddEvent = (ev: any) => {
-    (async () => {
-      try {
-        // Convert price to number: "Free" -> 0, parse numeric strings, default to null
-        let priceValue: number | null = null;
-        if (ev.price) {
-          const lower = String(ev.price).toLowerCase().trim();
-          if (lower === 'free' || lower === 'free admission') {
-            priceValue = 0;
-          } else {
-            const parsed = parseFloat(String(ev.price));
-            priceValue = isNaN(parsed) ? null : parsed;
-          }
-        }
+  const handleAddEvent = async (ev: any) => {
+    try {
+      const created = await apiCreateEvent(ev);
 
-        const created = await apiCreateEvent({
-          title: ev.title,
-          description: ev.description,
-          category: ev.category,
-          organizer: ev.organizer,
-          start_at: ev.date,
-          location: ev.location,
-          price: priceValue,
-          image_url: typeof ev.image === 'string' ? ev.image : null,
-        });
-
-        if (created) {
-          alert('Event added successfully! ID = ' + created.id);
-          await loadEvents(); // Fetch the latest events from DB
-        } else {
-          console.warn('API did not return the created event object.');
-          alert('Event added locally, but API did not return a record.');
-        }
-      } catch (err: any) {
-        console.error('Create event failed:', err);
-        alert('Failed to add event: ' + (err?.message || String(err)));
+      if (created) {
+        Alert.alert('Success', 'Event created successfully!');
+        await loadEvents();
       }
-    })();
+    } catch (err: any) {
+      console.error('Create event failed:', err);
+      Alert.alert('Error', err?.message || 'Failed to create event');
+    }
   };
 
   // Fetch events from Supabase on mount
@@ -253,13 +334,45 @@ export default function EventsScreen() {
       <View style={styles.headerRow}>
         <View>
           <Text style={[styles.title, { color: colors.text }]}>Events</Text>
-          <Text style={{ color: colors.textSecondary }}>{eventsWithWishlist.length} events available</Text>
+          <Text style={{ color: colors.textSecondary }}>{events.length} events available</Text>
         </View>
 
         <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={() => setShowAdd(true)}>
           <Text style={{ color: '#fff', fontWeight: '700' }}>+ Add Event</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Test notification buttons - Only show in development */}
+      {/* {__DEV__ && (
+        <View style={styles.testButtons}>
+          <Text style={[styles.testTitle, { color: colors.textSecondary }]}>🧪 Test Notifications:</Text>
+          <View style={styles.testButtonRow}>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: colors.primary }]}
+              onPress={handleTestNotification}>
+              <Text style={styles.testButtonText}>📨 Test</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: colors.primary }]}
+              onPress={handleCheckLocation}>
+              <Text style={styles.testButtonText}>📍 Location</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: colors.primary }]}
+              onPress={requestPermissions}>
+              <Text style={styles.testButtonText}>🔐 Perms</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: isBackgroundTaskActive ? '#4CAF50' : colors.primary }]}
+              onPress={handleToggleBackgroundTask}>
+              <Text style={styles.testButtonText}>🔄 BG Task</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            Perms: {hasNotificationPermission ? '✅' : '❌'} Notif | {hasLocationPermission ? '✅' : '❌'} Location | BG: {isBackgroundTaskActive ? '✅' : '❌'}
+          </Text>
+        </View>
+      )} */}
 
       <SearchBar onSearch={handleSearch} />
 
@@ -270,12 +383,21 @@ export default function EventsScreen() {
           organizer={e.organizer || 'Unknown Organizer'}
           date={e.start_at ? new Date(e.start_at).toLocaleDateString() : 'Date TBD'}
           location={e.location || 'Location TBD'}
+          locationName={e.location_name}
+          latitude={e.latitude}
+          longitude={e.longitude}
           imageUrl={e.image_url}
+          price={e.price !== null ? (e.price === 0 ? 'Free' : `LKR ${e.price.toFixed(2)}`) : undefined}
+          category={e.category}
+          createdBy={e.created_by}
           onPress={() => handleEventPress(e.id)}
           onBookmark={() => handleWishlistToggle(e.id, e.isInWishlist)}
           isBookmarked={e.isInWishlist}
           onShare={() => handleShare(e)}
-          onRsvp={() => handleRSVP(e)}
+          onEdit={() => {
+            Alert.alert('Edit Event', 'Edit functionality coming soon');
+          }}
+          onDelete={() => handleDeleteEvent(e.id, e.title)}
           onLongPress={() => {
             Alert.alert(
               'Event Actions',
@@ -302,6 +424,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingVertical: 16,
+    paddingBottom: 90,
   },
   headerRow: {
     paddingHorizontal: 16,
@@ -318,5 +441,40 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+  },
+  testButtons: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 123, 255, 0.3)',
+  },
+  testTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  testButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  testButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  statusText: {
+    fontSize: 10,
+    marginTop: 4,
   },
 });

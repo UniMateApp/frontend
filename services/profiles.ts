@@ -13,3 +13,13 @@ export async function getProfile(id: string) {
   if (error) throw error;
   return data;
 }
+
+export async function getAllProfiles() {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('full_name', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}

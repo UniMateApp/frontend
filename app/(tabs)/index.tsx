@@ -4,14 +4,15 @@ import { SearchBar } from '@/components/search-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { listEvents as apiListEvents } from '@/services/events';
+import { resolveLostFoundItem } from '@/services/lostFound';
 import {
-  Event,
-  MappedLostFoundItem,
-  addEventToWishlist,
-  addLostFoundToWishlist,
-  getEventsWithWishlistStatus,
-  getLostFoundWithWishlistStatus,
-  removeItemFromWishlist,
+    Event,
+    MappedLostFoundItem,
+    addEventToWishlist,
+    addLostFoundToWishlist,
+    getEventsWithWishlistStatus,
+    getLostFoundWithWishlistStatus,
+    removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -35,18 +36,32 @@ export default function HomeScreen() {
   const filterOptions = ['All', 'Events', 'Lost & Found'];
   const hasFocusedOnce = useRef(false);
 
-  /** Filter items by search + type */
+  /** Filter items by search + type and exclude resolved lost-found items */
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
     let list = allItems;
-    
+
     // Filter by item type (Events, Lost & Found, or All)
     if (activeFilter === 'Events') {
       list = list.filter(item => item.itemType === 'event');
     } else if (activeFilter === 'Lost & Found') {
       list = list.filter(item => item.itemType === 'lost_found');
     }
-    
+
+    // Exclude resolved lost-found items so only unresolved are visible
+    list = list.filter(item => !(item.itemType === 'lost_found' && (item as any).is_resolved));
+
+    // Exclude events that started more than 4 hours ago
+    list = list.filter(item => {
+      if (item.itemType !== 'event') return true;
+      const event = item as Event & { isInWishlist: boolean; itemType: 'event' };
+      if (!event.start_at) return true; // Keep events without a start time
+      const eventStart = new Date(event.start_at);
+      return eventStart >= fourHoursAgo;
+    });
+
     // Filter by search query
     if (!q) return list;
     return list.filter(item => {
@@ -61,6 +76,17 @@ export default function HomeScreen() {
   }, [query, activeFilter, allItems]);
 
   const handleSearch = (text: string) => setQuery(text);
+
+  /** Mark a lost-found item as resolved (acts like delete/resolve) */
+  const handleMarkResolved = async (itemId: string) => {
+    try {
+      await resolveLostFoundItem(String(itemId));
+      setAllItems(prev => prev.map(i => i.id === itemId && i.itemType === 'lost_found' ? { ...i, is_resolved: true } : i));
+    } catch (err: any) {
+      console.error('Failed to mark resolved', err);
+      Alert.alert('Error', err?.message || 'Could not mark item resolved');
+    }
+  };
 
   const handleEventPress = (eventId: string) => {
     router.push({ pathname: '/event/[id]', params: { id: eventId } });
@@ -232,10 +258,24 @@ export default function HomeScreen() {
               organizer={event.organizer || 'Unknown Organizer'}
               date={event.start_at ? new Date(event.start_at).toLocaleDateString() : 'Date TBD'}
               location={event.location || 'Location TBD'}
+              locationName={event.location_name}
+              latitude={event.latitude}
+              longitude={event.longitude}
+              price={event.price !== null ? (event.price === 0 ? 'Free' : `LKR ${event.price.toFixed(2)}`) : undefined}
               imageUrl={event.image_url || require('../../assets/images/icon.png')}
+              createdBy={event.created_by}
               onPress={() => handleEventPress(event.id)}
               onBookmark={() => handleWishlistToggle(event.id, 'event', event.isInWishlist)}
               isBookmarked={event.isInWishlist}
+              onShare={() => {
+                Alert.alert('Share', `Share "${event.title}" - Feature coming soon!`);
+              }}
+              onEdit={() => {
+                Alert.alert('Edit Event', 'Edit functionality coming soon');
+              }}
+              onDelete={() => {
+                Alert.alert('Delete Event', `Delete "${event.title}" - Navigate to event details to delete`);
+              }}
             />
           );
         } else {
@@ -258,15 +298,8 @@ export default function HomeScreen() {
               }}
               isInWishlist={lostFound.isInWishlist}
               onPress={() => handleLostFoundPress(lostFound.id)}
-              onWishlistToggle={() => handleWishlistToggle(lostFound.id, 'lost_found', lostFound.isInWishlist)}
-              onResolve={(id) => {
-                // Navigate to lost-found screen for full functionality
-                router.push('/(tabs)/lost-found');
-              }}
-              onDelete={(id) => {
-                // Navigate to lost-found screen for full functionality
-                router.push('/(tabs)/lost-found');
-              }}
+              onWishlistToggle={(id, current) => handleWishlistToggle(String(id), 'lost_found', Boolean(current))}
+              onResolve={(id) => handleMarkResolved(String(id))}
             />
           );
         }
@@ -277,7 +310,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingVertical: 16 },
+  content: { paddingVertical: 16, paddingBottom: 90 },
   headerSection: { paddingHorizontal: 16 },
   chipsRow: {
     flexDirection: 'row',
