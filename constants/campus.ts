@@ -5,8 +5,8 @@
 
 export const CAMPUS_COORDINATES = {
   // University of Moratuwa, Sri Lanka
-  latitude: 6.1501794,
-  longitude: 80.6446576,
+  latitude: 6.7970301,
+  longitude: 79.8999734,
 };
 
 // Fixed location name for Lost & Found posts

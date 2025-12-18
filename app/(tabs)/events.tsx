@@ -6,17 +6,17 @@ import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEventScheduler } from '@/hooks/useEventScheduler';
 import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService';
-import { 
-  createEvent as apiCreateEvent, 
-  deleteEvent as apiDeleteEvent, 
+import {
+  createEvent as apiCreateEvent,
+  deleteEvent as apiDeleteEvent,
   listEvents as apiListEvents,
 } from '@/services/events';
 import { forceCheckLocation, sendTestNotification } from '@/services/immediateNotifier';
 import {
-    Event,
-    addEventToWishlist,
-    getEventsWithWishlistStatus,
-    removeItemFromWishlist,
+  Event,
+  addEventToWishlist,
+  getEventsWithWishlistStatus,
+  removeItemFromWishlist,
 } from '@/services/selectiveWishlist';
 import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
@@ -69,8 +69,18 @@ export default function EventsScreen() {
 
   const events = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return eventsWithWishlist;
-    return eventsWithWishlist.filter((e: Event & { isInWishlist: boolean }) => 
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    
+    // Filter out events that started more than 4 hours ago
+    const activeEvents = eventsWithWishlist.filter((e: Event & { isInWishlist: boolean }) => {
+      if (!e.start_at) return true; // Keep events without a start time
+      const eventStart = new Date(e.start_at);
+      return eventStart >= fourHoursAgo;
+    });
+    
+    if (!q) return activeEvents;
+    return activeEvents.filter((e: Event & { isInWishlist: boolean }) => 
       (e.title + ' ' + (e.organizer || '') + ' ' + (e.location || '')).toLowerCase().includes(q)
     );
   }, [query, eventsWithWishlist]);
@@ -332,7 +342,7 @@ export default function EventsScreen() {
       </View>
 
       {/* Test notification buttons - Only show in development */}
-      {/* {__DEV__ && (
+      {__DEV__ && (
         <View style={styles.testButtons}>
           <Text style={[styles.testTitle, { color: colors.textSecondary }]}>🧪 Test Notifications:</Text>
           <View style={styles.testButtonRow}>
@@ -361,7 +371,7 @@ export default function EventsScreen() {
             Perms: {hasNotificationPermission ? '✅' : '❌'} Notif | {hasLocationPermission ? '✅' : '❌'} Location | BG: {isBackgroundTaskActive ? '✅' : '❌'}
           </Text>
         </View>
-      )} */}
+      )}
 
       <SearchBar onSearch={handleSearch} />
 

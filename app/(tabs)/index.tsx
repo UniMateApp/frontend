@@ -39,6 +39,8 @@ export default function HomeScreen() {
   /** Filter items by search + type and exclude resolved lost-found items */
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
     let list = allItems;
 
     // Filter by item type (Events, Lost & Found, or All)
@@ -50,6 +52,15 @@ export default function HomeScreen() {
 
     // Exclude resolved lost-found items so only unresolved are visible
     list = list.filter(item => !(item.itemType === 'lost_found' && (item as any).is_resolved));
+
+    // Exclude events that started more than 4 hours ago
+    list = list.filter(item => {
+      if (item.itemType !== 'event') return true;
+      const event = item as Event & { isInWishlist: boolean; itemType: 'event' };
+      if (!event.start_at) return true; // Keep events without a start time
+      const eventStart = new Date(event.start_at);
+      return eventStart >= fourHoursAgo;
+    });
 
     // Filter by search query
     if (!q) return list;

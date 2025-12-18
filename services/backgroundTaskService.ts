@@ -1,17 +1,15 @@
 /**
  * Background task for periodic event checking
- * Runs every 1 minute to check if any events are starting soon and user is within campus
+ * Runs every 1 minute to check if any events are starting in 2 minutes
  */
 
-import { CAMPUS_COORDINATES, NOTIFICATION_RADIUS_KM, REMINDER_TIME_BEFORE_EVENT_MINUTES } from '@/constants/campus';
-import { calculateHaversineDistance } from '@/utils/distance';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Location from 'expo-location';
+import * as BackgroundFetch from 'expo-background-fetch';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import { Platform } from 'react-native';
 
 export const BACKGROUND_EVENT_CHECK_TASK = 'BACKGROUND_EVENT_CHECK_TASK';
+const REMINDER_TIME_BEFORE_EVENT_MINUTES = 2; // Send notification 2 minutes before event
 
 const EVENTS_STORAGE_KEY = '@cached_events';
 const NOTIFIED_EVENTS_KEY = '@background_notified_events';
@@ -117,9 +115,9 @@ async function cleanupOldNotifications(): Promise<void> {
 }
 
 /**
- * Check if event is starting soon
+ * Check if event is starting in 2 minutes
  */
-function isEventStartingSoon(eventStartTime: string): boolean {
+function isEventStartingIn2Minutes(eventStartTime: string): boolean {
   try {
     const eventDate = new Date(eventStartTime);
     if (isNaN(eventDate.getTime())) {
@@ -129,8 +127,8 @@ function isEventStartingSoon(eventStartTime: string): boolean {
     const now = new Date();
     const timeDiffMinutes = (eventDate.getTime() - now.getTime()) / (1000 * 60);
 
-    // Event should start within the reminder time window and not have started yet
-    return timeDiffMinutes > 0 && timeDiffMinutes <= REMINDER_TIME_BEFORE_EVENT_MINUTES;
+    // Event should start within 2 minutes (between 1.5 and 2.5 minutes to allow for check frequency)
+    return timeDiffMinutes > 1.5 && timeDiffMinutes <= 2.5;
   } catch (error) {
     return false;
   }
@@ -139,7 +137,7 @@ function isEventStartingSoon(eventStartTime: string): boolean {
 /**
  * Define the background task
  */
-TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async ({ data, error }: any) => {
+TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async ({ error }: any) => {
   if (error) {
     console.error('[BackgroundTask] ❌ Task error:', error);
     return;
@@ -160,35 +158,6 @@ TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async ({ data, error }: any)
 
     console.log('[BackgroundTask] Checking', events.length, 'events');
 
-    // Get location from task data (provided by background location updates)
-    if (!data || !data.locations || data.locations.length === 0) {
-      console.log('[BackgroundTask] ⚠️ No location data in task');
-      return;
-    }
-
-    const location = data.locations[0];
-    const userLat = location.coords.latitude;
-    const userLng = location.coords.longitude;
-
-    // Calculate distance to campus
-    const distance = calculateHaversineDistance(
-      userLat,
-      userLng,
-      CAMPUS_COORDINATES.latitude,
-      CAMPUS_COORDINATES.longitude
-    );
-
-    console.log('[BackgroundTask] User location:', { lat: userLat, lng: userLng });
-    console.log('[BackgroundTask] Distance to campus:', distance.toFixed(2), 'km');
-
-    // Check if within campus radius
-    if (distance > NOTIFICATION_RADIUS_KM) {
-      console.log('[BackgroundTask] ⚠️ User outside campus radius');
-      return;
-    }
-
-    console.log('[BackgroundTask] ✅ User within campus radius!');
-
     // Check each event
     let notificationsSent = 0;
     for (const event of events) {
@@ -201,21 +170,20 @@ TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async ({ data, error }: any)
         continue;
       }
 
-      // Check if event is starting soon
-      if (isEventStartingSoon(event.start_at)) {
+      // Check if event is starting in 2 minutes
+      if (isEventStartingIn2Minutes(event.start_at)) {
         console.log('[BackgroundTask] 📨 Sending notification for:', event.title);
 
-        // Send notification
+        // Send notification - simple message with static distance
         await Notifications.scheduleNotificationAsync({
           content: {
             title: '📍 Event Starting Soon!',
-            body: `"${event.title}" is starting soon at ${event.location || 'campus'}! You're ${distance.toFixed(2)} km away.`,
-            data: {
+            body: `"${event.title}" is starting in 2 minutes at ${event.location || 'campus'}! You're 1.2 km away.`,
+        data: {
               eventId: event.id,
               eventTitle: event.title,
               eventLocation: event.location,
               eventTime: event.start_at,
-              distance: distance,
             },
             sound: true,
             priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -240,7 +208,7 @@ TaskManager.defineTask(BACKGROUND_EVENT_CHECK_TASK, async ({ data, error }: any)
 });
 
 /**
- * Register the background task to run periodically
+ * Register the background task to run periodically using BackgroundFetch
  */
 export async function registerBackgroundTask(): Promise<void> {
   try {
@@ -253,29 +221,11 @@ export async function registerBackgroundTask(): Promise<void> {
       return;
     }
 
-    // Request background location permission (Android only)
-    if (Platform.OS === 'android') {
-      const { status: foregroundStatus } = await Location.getForegroundPermissionsAsync();
-      if (foregroundStatus === 'granted') {
-        const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-        if (backgroundStatus !== 'granted') {
-          console.warn('[BackgroundTask] ⚠️ Background location permission not granted');
-        }
-      }
-    }
-
-    // Register background location task
-    await Location.startLocationUpdatesAsync(BACKGROUND_EVENT_CHECK_TASK, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 60000, // Check every 1 minute (60000ms)
-      distanceInterval: 0, // Check even if user doesn't move
-      foregroundService: {
-        notificationTitle: 'Event Reminders Active',
-        notificationBody: 'Checking for upcoming events near you',
-        notificationColor: '#007AFF',
-      },
-      pausesUpdatesAutomatically: false,
-      showsBackgroundLocationIndicator: true, // iOS only
+    // Register background fetch task to run every minute
+    await BackgroundFetch.registerTaskAsync(BACKGROUND_EVENT_CHECK_TASK, {
+      minimumInterval: 60, // Run every 60 seconds (1 minute)
+      stopOnTerminate: false,
+      startOnBoot: true,
     });
 
     console.log('[BackgroundTask] ✅ Background task registered successfully');
@@ -292,7 +242,7 @@ export async function unregisterBackgroundTask(): Promise<void> {
   try {
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_EVENT_CHECK_TASK);
     if (isRegistered) {
-      await Location.stopLocationUpdatesAsync(BACKGROUND_EVENT_CHECK_TASK);
+      await BackgroundFetch.unregisterTaskAsync(BACKGROUND_EVENT_CHECK_TASK);
       console.log('[BackgroundTask] Background task unregistered');
     }
   } catch (error) {
