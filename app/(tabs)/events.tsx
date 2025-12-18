@@ -62,6 +62,7 @@ export default function EventsScreen() {
   useEffect(() => {
     const checkBackgroundTask = async () => {
       const isRegistered = await isBackgroundTaskRegistered();
+      console.log('[Events] Background task registered:', isRegistered);
       setIsBackgroundTaskActive(isRegistered);
     };
     checkBackgroundTask();
