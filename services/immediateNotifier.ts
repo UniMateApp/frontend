@@ -189,7 +189,7 @@ function isEventStartingSoon(eventStartTime: string): boolean {
  */
 async function sendNotificationForEvent(event: Event, distance: number): Promise<void> {
   try {
-    console.log(`[ImmediateNotifier] 📨 Sending notification for: "${event.title}"`);
+    console.log(`[ImmediateNotifier]  Sending notification for: "${event.title}"`);
     
     const locationName = event.location_name || event.location || 'the event location';
     
@@ -224,12 +224,12 @@ async function sendNotificationForEvent(event: Event, distance: number): Promise
  */
 export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
   try {
-    console.log(`[ImmediateNotifier] 🔍 Checking ${events.length} events for notifications...`);
+    console.log(`[ImmediateNotifier] Checking ${events.length} events for notifications...`);
 
     // Clean up old notifications
     await cleanupOldNotifications();
 
-    // Get user's current location once
+    // 1. Get user's current location once
     const userLocation = await getUserLocation();
     
     if (!userLocation) {
@@ -237,12 +237,12 @@ export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
       return;
     }
 
-    // Check each event against user's location
+    // 2. Check each event against user's location by looping through each event
     let notificationsSent = 0;
     for (const event of events) {
-      // Skip if no start time
+      // Skip if no start time 
       if (!event.start_at) {
-        console.log(`[ImmediateNotifier] ⚠️ Event "${event.title}" has no start time, skipping`);
+        console.log(`[ImmediateNotifier] Event "${event.title}" has no start time, skipping`);
         continue;
       }
 
@@ -259,16 +259,16 @@ export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
         continue;
       }
 
-      // Check if event is starting soon
+      // 3. Check if event is starting soon
       if (!isEventStartingSoon(event.start_at)) {
         const eventDate = new Date(event.start_at);
         const now = new Date();
         const timeDiffMinutes = (eventDate.getTime() - now.getTime()) / (1000 * 60);
         console.log(`[ImmediateNotifier] Event "${event.title}" not in notification window (starts in ${timeDiffMinutes.toFixed(1)} min)`);
-        continue;
+        continue; // Not starting soon
       }
 
-      // Check if user is within radius of this event's location
+      // 4. Check if user is within radius of this event's location
       const { withinRadius, distance } = isUserWithinEventRadius(
         userLocation,
         event.latitude,
@@ -282,25 +282,26 @@ export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
       });
       console.log(`[ImmediateNotifier] Distance to event: ${distance.toFixed(2)} km`);
 
+      // 5. Only send notification if within 8km radius
       if (withinRadius) {
-        console.log(`[ImmediateNotifier] ✅ User is within ${NOTIFICATION_RADIUS_KM} km of event "${event.title}"`);
+        console.log(`[ImmediateNotifier] User is within ${NOTIFICATION_RADIUS_KM} km of event "${event.title}"`);
         
         // Send notification
         await sendNotificationForEvent(event, distance);
         await markEventAsNotified(event.id);
         notificationsSent++;
       } else {
-        console.log(`[ImmediateNotifier] ⚠️ User is outside ${NOTIFICATION_RADIUS_KM} km radius of event "${event.title}"`);
+        console.log(`[ImmediateNotifier] User is outside ${NOTIFICATION_RADIUS_KM} km radius of event "${event.title}"`);
       }
     }
 
     if (notificationsSent > 0) {
-      console.log(`[ImmediateNotifier] 🎉 Sent ${notificationsSent} notification(s)`);
+      console.log(`[ImmediateNotifier] Sent ${notificationsSent} notification(s)`);
     } else {
       console.log('[ImmediateNotifier] No notifications sent (no eligible events)');
     }
   } catch (error) {
-    console.error('[ImmediateNotifier] ❌ Error checking and notifying events:', error);
+    console.error('[ImmediateNotifier] Error checking and notifying events:', error);
   }
 }
 
@@ -309,7 +310,7 @@ export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
  */
 export async function sendTestNotification(): Promise<void> {
   try {
-    console.log('[ImmediateNotifier] 🧪 Sending test notification...');
+    console.log('[ImmediateNotifier] Sending test notification...');
     
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -321,9 +322,9 @@ export async function sendTestNotification(): Promise<void> {
       trigger: null, // Send immediately
     });
 
-    console.log('[ImmediateNotifier] ✅ Test notification sent');
+    console.log('[ImmediateNotifier] Test notification sent');
   } catch (error) {
-    console.error('[ImmediateNotifier] ❌ Error sending test notification:', error);
+    console.error('[ImmediateNotifier] Error sending test notification:', error);
     throw error;
   }
 }
