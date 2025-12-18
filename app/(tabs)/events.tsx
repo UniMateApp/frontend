@@ -343,7 +343,7 @@ export default function EventsScreen() {
       </View>
 
       {/* Test notification buttons - Only show in development */}
-      {__DEV__ && (
+      {/* {__DEV__ && (
         <View style={styles.testButtons}>
           <Text style={[styles.testTitle, { color: colors.textSecondary }]}>🧪 Test Notifications:</Text>
           <View style={styles.testButtonRow}>
@@ -372,7 +372,7 @@ export default function EventsScreen() {
             Perms: {hasNotificationPermission ? '✅' : '❌'} Notif | {hasLocationPermission ? '✅' : '❌'} Location | BG: {isBackgroundTaskActive ? '✅' : '❌'}
           </Text>
         </View>
-      )}
+      )} */}
 
       <SearchBar onSearch={handleSearch} />
 
