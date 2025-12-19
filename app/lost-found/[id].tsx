@@ -14,23 +14,36 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 // Default image for lost and found items
 const DEFAULT_LOST_FOUND_IMAGE = require('@/assets/images/icon.png');
 
+// ========================================
+// LOST AND FOUND DETAIL SCREEN
+// ========================================
+// This screen displays full details of a single lost/found item:
+// 1. Load item details from database by ID
+// 2. Display images in carousel
+// 3. Show location on map with reverse geocoding (coordinates -> place name)
+// 4. Allow owner to resolve/delete item
+// 5. Allow users to add/remove from wishlist
+// 6. Enable sharing and chatting with poster
+// ========================================
+
 export default function LostFoundDetailsScreen() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams(); // Get item ID from route params
   const router = useRouter();
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   
-  const [item, setItem] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
-  const [isInWishlist, setIsInWishlist] = useState(false);
-  const [wishlistLoading, setWishlistLoading] = useState(false);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const { user } = useUser();
-  const isOwner = Boolean(user && item && item.created_by && String(user.id) === String(item.created_by));
-  const [placeName, setPlaceName] = useState<string | null>(null);
+  // STEP 1: STATE MANAGEMENT
+  const [item, setItem] = useState<any>(null); // The lost/found item data
+  const [loading, setLoading] = useState(true); // Initial loading state
+  const [error, setError] = useState<string | null>(null); // Error message if load fails
+  const [updating, setUpdating] = useState(false); // Update operation in progress
+  const [isInWishlist, setIsInWishlist] = useState(false); // Is this item in user's wishlist?
+  const [wishlistLoading, setWishlistLoading] = useState(false); // Wishlist operation in progress
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0); // Current image in carousel
+  const { user } = useUser(); // Current logged-in user
+  const isOwner = Boolean(user && item && item.created_by && String(user.id) === String(item.created_by)); // Is current user the owner?
+  const [placeName, setPlaceName] = useState<string | null>(null); // Human-readable place name from coordinates
 
   // simple shared cache for geocoding results + AsyncStorage persistence
   const geocodeCache = (global as any).__UM_GeocodeCache ||= new Map<string, string | null>();

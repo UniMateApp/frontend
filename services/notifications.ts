@@ -1,9 +1,28 @@
+// ========================================
+// NOTIFICATIONS SERVICE - MANAGE APP NOTIFICATIONS
+// ========================================
+// This service handles in-app notification operations:
+// - Create notifications for users
+// - List notifications for a user
+// - Mark as read (single or all)
+// - Subscribe to realtime updates
+//
+// Notifications are created for:
+// - Lost/Found matches (opposite type posted)
+// - Event reminders (time-based)
+// - Other app events
+// ========================================
+
 import { supabase as getSupabase } from './supabase';
 
-/** Insert one or more notifications into the `notifications` table. */
+// OPERATION 1: CREATE NOTIFICATIONS
+/** Insert one or more notifications into the database */
 export async function createNotifications(payloads: Array<any>) {
   const supabase = await getSupabase();
-  const { data, error } = await supabase.from('notifications').insert(payloads).select();
+  const { data, error } = await supabase
+    .from('notifications')
+    .insert(payloads) // Insert notification(s)
+    .select(); // Return created rows
   if (error) throw error;
   return data;
 }

@@ -1,6 +1,72 @@
 /**
- * Background task for checking user location and sending event reminders
- * This task runs 1 hour before each event to check if the user is near campus
+ * ===============================================================================
+ * EVENT REMINDER TASK - LOCATION-CHECKING BACKGROUND TASK (LEGACY)
+ * ===============================================================================
+ * 
+ * STATUS: LEGACY / NOT CURRENTLY USED
+ * This file represents an earlier approach to location-aware notifications.
+ * The app now uses immediateNotifier.ts and backgroundTaskService.ts instead.
+ * 
+ * ORIGINAL PURPOSE:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Run a background task 1 hour before each event to:
+ * 1. Get user's GPS location
+ * 2. Calculate distance to campus (CAMPUS_COORDINATES)
+ * 3. Only send notification if user is within NOTIFICATION_RADIUS_KM
+ * 
+ * HOW IT WAS DESIGNED TO WORK:
+ * ────────────────────────────────────────────────────────────────────────────
+ * 
+ * Step 1: TASK SCHEDULING
+ *   - Schedule individual task for each event
+ *   - Task triggered at: event.start_at - 1 hour
+ *   - Task data includes: eventId, eventTitle, eventLocation, eventTime
+ * 
+ * Step 2: TASK EXECUTION (at trigger time)
+ *   - Check if event already notified (skip if yes)
+ *   - Request location permission
+ *   - Get current GPS position using expo-location
+ *   - Calculate distance to CAMPUS_COORDINATES using Haversine formula
+ * 
+ * Step 3: PROXIMITY CHECK
+ *   - isWithinRadius(userLat, userLng, campusLat, campusLng, radiusKm)
+ *   - If within radius: Send notification ✅
+ *   - If outside radius: Skip notification, log to console ❌
+ * 
+ * Step 4: NOTIFICATION
+ *   - Title: "📍 Event Reminder"
+ *   - Body: Event title, location, "starting in 1 hour"
+ *   - Mark event as notified (prevent duplicates)
+ * 
+ * WHY NOT USED:
+ * ────────────────────────────────────────────────────────────────────────────
+ * ❌ Scheduling individual tasks for each event is complex
+ * ❌ Expo TaskManager has limitations with task scheduling
+ * ❌ Background location access difficult to obtain (privacy concerns)
+ * ❌ iOS severely restricts background location access
+ * ❌ Task might not fire at exact scheduled time
+ * 
+ * CURRENT APPROACH (immediateNotifier.ts):
+ * ────────────────────────────────────────────────────────────────────────────
+ * ✅ Check location when user opens app (foreground)
+ * ✅ Check location when events list changes
+ * ✅ Simpler permission model (foreground location only)
+ * ✅ More reliable execution
+ * ✅ Better battery efficiency
+ * 
+ * STORAGE:
+ * ────────────────────────────────────────────────────────────────────────────
+ * AsyncStorage key: @notified_events
+ * Format: Set of event IDs that have been notified
+ * Purpose: Prevent sending same notification multiple times
+ * 
+ * FUNCTIONS:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - isTaskRegistered(): Check if task is registered
+ * - getNotifiedEvents(): Get set of notified event IDs
+ * - markEventAsNotified(eventId): Add event to notified set
+ * - cleanupNotifiedEvents(): Remove old entries (currently no-op)
+ * ===============================================================================
  */
 
 import { CAMPUS_COORDINATES, NOTIFICATION_RADIUS_KM } from '@/constants/campus';

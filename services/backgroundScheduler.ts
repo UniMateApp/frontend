@@ -1,6 +1,77 @@
 /**
- * Background scheduler service for managing event reminder notifications
- * Handles scheduling and canceling background tasks for event reminders
+ * ===============================================================================
+ * BACKGROUND SCHEDULER - TIME-BASED NOTIFICATION SCHEDULING
+ * ===============================================================================
+ * 
+ * PURPOSE:
+ * Alternative approach for scheduling notifications at specific times.
+ * This service schedules notifications to fire at a specific time (e.g., 1 hour
+ * before event), but does NOT check location automatically.
+ * 
+ * NOTE: Currently NOT the primary notification method. The app uses
+ * immediateNotifier.ts for real-time location-aware notifications instead.
+ * 
+ * HOW IT WORKS:
+ * ────────────────────────────────────────────────────────────────────────────
+ * 
+ * Step 1: CALCULATE TRIGGER TIME
+ *   - Event starts at: 2:00 PM
+ *   - Reminder time: REMINDER_TIME_BEFORE_EVENT_MINUTES (2 min)
+ *   - Trigger time: 2:00 PM - 2 min = 1:58 PM
+ *   - If trigger time is in the past, skip scheduling
+ * 
+ * Step 2: SCHEDULE NOTIFICATION
+ *   - Use expo-notifications to schedule at trigger time (1:58 PM)
+ *   - Notification contains event details (title, location, time)
+ *   - Store notification ID and metadata in AsyncStorage
+ *   - Key: @scheduled_notifications
+ * 
+ * Step 3: NOTIFICATION FIRES
+ *   - At trigger time (1:58 PM), notification appears
+ *   - Does NOT check user location automatically
+ *   - User sees notification regardless of their distance from event
+ * 
+ * LIMITATIONS:
+ * ────────────────────────────────────────────────────────────────────────────
+ * ❌ No automatic location checking when notification fires
+ * ❌ Cannot guarantee notification fires exactly at scheduled time (OS decides)
+ * ❌ May not work reliably when app is fully closed (OS restrictions)
+ * ❌ User might receive notification even if far from campus
+ * 
+ * WHY USE IMMEDIATE NOTIFIER INSTEAD?
+ * ────────────────────────────────────────────────────────────────────────────
+ * ✅ Checks user location in real-time before sending notification
+ * ✅ Only notifies if user is within 8km radius of event
+ * ✅ More relevant notifications (user is actually nearby)
+ * ✅ Better user experience (no spam when user is far away)
+ * 
+ * STORAGE:
+ * ────────────────────────────────────────────────────────────────────────────
+ * AsyncStorage key: @scheduled_notifications
+ * Format: Array of {
+ *   eventId: string,
+ *   notificationId: string (from expo-notifications),
+ *   scheduledTime: number (timestamp),
+ *   eventTitle: string
+ * }
+ * 
+ * FUNCTIONS:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - scheduleEventReminder(event): Schedule single event notification
+ * - scheduleMultipleEventReminders(events): Batch schedule multiple events
+ * - cancelEventReminder(eventId): Cancel notification for specific event
+ * - cancelAllEventReminders(): Cancel all scheduled notifications
+ * - cleanupPastReminders(): Remove past notifications from storage
+ * - syncNotificationsWithEvents(events): Cancel notifications for deleted events
+ * 
+ * ANDROID NOTIFICATION CHANNEL:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Channel ID: 'event-reminders'
+ * Importance: HIGH (shows as heads-up notification)
+ * Sound: Default system sound
+ * Vibration: [0, 250, 250, 250] (quarter second pulses)
+ * Badge: Enabled (shows notification count on app icon)
+ * ===============================================================================
  */
 
 import { REMINDER_TIME_BEFORE_EVENT_MINUTES } from '@/constants/campus';

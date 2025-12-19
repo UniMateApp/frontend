@@ -1,3 +1,15 @@
+// ========================================
+// HOME SCREEN - UNIFIED FEED OF EVENTS AND LOST & FOUND
+// ========================================
+// This is the main landing screen showing:
+// 1. Combined feed of events and lost/found items
+// 2. Search functionality across both types
+// 3. Filter tabs: All, Events, Lost & Found
+// 4. Wishlist (heart) functionality for both types
+// 5. Auto-hide old events (started >4 hours ago)
+// 6. Hide resolved lost/found items
+// ========================================
+
 import { EventCard } from '@/components/event-card';
 import LostFoundItemCard from '@/components/lost-found-item-card';
 import { SearchBar } from '@/components/search-bar';
@@ -18,7 +30,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-// Unified item type for both events and lost-found items
+// UNIFIED TYPE - Combines events and lost/found items with common properties
 type UnifiedItem = 
   | (Event & { isInWishlist: boolean; itemType: 'event' })
   | (MappedLostFoundItem & { isInWishlist: boolean; itemType: 'lost_found' });
@@ -27,49 +39,59 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const [query, setQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string>('All');
-  const [allItems, setAllItems] = useState<UnifiedItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // STATE MANAGEMENT
+  const [query, setQuery] = useState(''); // Search query text
+  const [activeFilter, setActiveFilter] = useState<string>('All'); // Active filter tab
+  const [allItems, setAllItems] = useState<UnifiedItem[]>([]); // Combined list of items
+  const [loading, setLoading] = useState(false); // Loading state
+  const [error, setError] = useState<string | null>(null); // Error message
 
   const filterOptions = ['All', 'Events', 'Lost & Found'];
   const hasFocusedOnce = useRef(false);
 
-  /** Filter items by search + type and exclude resolved lost-found items */
+  // SMART FILTERING - Apply multiple filters to create final display list
+  /** 
+   * Filters items by:
+   * 1. Item type (All/Events/Lost & Found)
+   * 2. Hide resolved lost/found items
+   * 3. Hide old events (>4 hours ago)
+   * 4. Search query (title, description, location)
+   */
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     const now = new Date();
-    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000); // 4 hours ago timestamp
     let list = allItems;
 
-    // Filter by item type (Events, Lost & Found, or All)
+    // FILTER 1: By item type tab (Events, Lost & Found, or All)
     if (activeFilter === 'Events') {
       list = list.filter(item => item.itemType === 'event');
     } else if (activeFilter === 'Lost & Found') {
       list = list.filter(item => item.itemType === 'lost_found');
     }
 
-    // Exclude resolved lost-found items so only unresolved are visible
+    // FILTER 2: Hide resolved lost-found items (soft-deleted)
     list = list.filter(item => !(item.itemType === 'lost_found' && (item as any).is_resolved));
 
-    // Exclude events that started more than 4 hours ago
+    // FILTER 3: Hide events that started >4 hours ago (keep current/upcoming only)
     list = list.filter(item => {
-      if (item.itemType !== 'event') return true;
+      if (item.itemType !== 'event') return true; // Keep all lost/found items
       const event = item as Event & { isInWishlist: boolean; itemType: 'event' };
-      if (!event.start_at) return true; // Keep events without a start time
+      if (!event.start_at) return true; // Keep events without start time
       const eventStart = new Date(event.start_at);
-      return eventStart >= fourHoursAgo;
+      return eventStart >= fourHoursAgo; // Only show if started within last 4 hours
     });
 
-    // Filter by search query
-    if (!q) return list;
+    // FILTER 4: Search query - match title, organizer, location, description
+    if (!q) return list; // No search query, return all
     return list.filter(item => {
       if (item.itemType === 'event') {
         const event = item as Event & { isInWishlist: boolean; itemType: 'event' };
+        // Search in event title, organizer, and location
         return (event.title + ' ' + (event.organizer || '') + ' ' + (event.location || '')).toLowerCase().includes(q);
       } else {
         const lostFound = item as MappedLostFoundItem & { isInWishlist: boolean; itemType: 'lost_found' };
+        // Search in item name, description, and location
         return (lostFound.item_name + ' ' + (lostFound.description || '') + ' ' + (lostFound.location || '')).toLowerCase().includes(q);
       }
     });

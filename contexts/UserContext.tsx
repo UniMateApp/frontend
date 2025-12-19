@@ -1,38 +1,56 @@
+// ========================================
+// USER CONTEXT - GLOBAL USER STATE MANAGEMENT
+// ========================================
+// This context provides global access to:
+// 1. Authenticated user (from Supabase Auth)
+// 2. User profile (from profiles table)
+// 3. Loading state
+// 4. Profile refresh function
+//
+// Used throughout the app to:
+// - Check if user is signed in
+// - Display user info (name, email, avatar)
+// - Restrict access to authenticated-only features
+// - React to auth state changes (sign in/out)
+// ========================================
+
 import { ensureUserProfile, getCurrentUser, onAuthStateChange } from '@/services/auth';
 import { getProfile } from '@/services/profiles';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
+// TYPE DEFINITIONS
 interface User {
-  id: string;
-  email?: string;
-  user_metadata?: {
+  id: string; // Supabase Auth user ID
+  email?: string; // User's email
+  user_metadata?: { // Additional user data from signup
     full_name?: string;
     avatar_url?: string;
   };
 }
 
 interface Profile {
-  id: string;
-  full_name?: string | null;
-  avatar_url?: string | null;
-  expo_push_token?: string | null;
+  id: string; // Same as user ID (foreign key)
+  full_name?: string | null; // User's display name
+  avatar_url?: string | null; // Profile picture URL
+  expo_push_token?: string | null; // For push notifications
   created_at?: string;
   updated_at?: string;
 }
 
 interface UserContextType {
-  user: User | null;
-  profile: Profile | null;
-  loading: boolean;
-  refreshProfile: () => Promise<void>;
+  user: User | null; // Authenticated user or null
+  profile: Profile | null; // User profile or null
+  loading: boolean; // True while fetching initial user/profile
+  refreshProfile: () => Promise<void>; // Manually refresh profile data
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // GLOBAL STATE - Available to all components via useUser() hook
+  const [user, setUser] = useState<User | null>(null); // Current authenticated user
+  const [profile, setProfile] = useState<Profile | null>(null); // Current user's profile
+  const [loading, setLoading] = useState(true); // Loading state
 
   const loadProfile = async (userId: string) => {
     try {

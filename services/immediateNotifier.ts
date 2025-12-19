@@ -1,13 +1,77 @@
 /**
- * Immediate location-based notification service
- * Checks if user is within each event's location radius and sends notifications immediately
+ * ===============================================================================
+ * IMMEDIATE LOCATION-AWARE NOTIFICATION SERVICE
+ * ===============================================================================
  * 
- * Flow:
- * 1. Get user's live GPS location once
- * 2. For each event with coordinates (latitude/longitude):
- *    - Calculate distance between user location and event location
- *    - If within NOTIFICATION_RADIUS_KM and event is starting soon, send notification
- * 3. Track notified events to prevent duplicate notifications
+ * PURPOSE:
+ * This service implements REAL-TIME location checking to send notifications when:
+ * - User is within 8km radius of an event location (NOTIFICATION_RADIUS_KM)
+ * - Event is starting within the next 2 minutes (REMINDER_TIME_BEFORE_EVENT_MINUTES)
+ * 
+ * HOW IT WORKS (5-STEP FLOW):
+ * ────────────────────────────────────────────────────────────────────────────
+ * Step 1: GET USER LOCATION (Once)
+ *   - Request GPS coordinates using expo-location
+ *   - Check if location services are enabled
+ *   - Verify location permissions are granted (foreground)
+ *   - Get current position with balanced accuracy
+ *   - Return: { latitude, longitude } or null if failed
+ * 
+ * Step 2: FILTER ELIGIBLE EVENTS
+ *   - Skip events without start_at timestamp
+ *   - Skip events without latitude/longitude coordinates
+ *   - Skip events already notified in last 24 hours (prevent duplicates)
+ *   - Skip events not starting within reminder time window (2 minutes)
+ * 
+ * Step 3: CALCULATE DISTANCE FOR EACH EVENT
+ *   - Use Haversine formula to calculate distance between:
+ *     → User location (from GPS)
+ *     → Event location (from database: event.latitude, event.longitude)
+ *   - Result: Distance in kilometers (e.g., 1.5 km)
+ * 
+ * Step 4: CHECK PROXIMITY THRESHOLD
+ *   - Compare calculated distance with NOTIFICATION_RADIUS_KM (8km)
+ *   - If distance ≤ 8km: User is within notification radius
+ *   - If distance > 8km: User is too far, skip notification
+ * 
+ * Step 5: SEND NOTIFICATION
+ *   - Only if user is within radius AND event is starting soon
+ *   - Create notification with:
+ *     → Title: "📍 Event Starting Soon!"
+ *     → Body: Event title, location name, distance to event
+ *     → Data: eventId, coordinates, time, distance
+ *   - Mark event as notified (store in AsyncStorage with timestamp)
+ *   - Prevent duplicate notifications for 24 hours
+ * 
+ * TRIGGERED BY:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - useEventScheduler hook (when events list changes)
+ * - Manual "Check Location" button in Events screen
+ * - When user adds a new event to their wishlist
+ * 
+ * LOCATION PERMISSION REQUIREMENTS:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Foreground location permission (android.permission.ACCESS_FINE_LOCATION)
+ * - Notification permission (expo-notifications)
+ * - Location services enabled on device
+ * 
+ * STORAGE:
+ * ────────────────────────────────────────────────────────────────────────────
+ * AsyncStorage key: @notified_events
+ * Format: Array of { eventId: string, notifiedAt: number }
+ * Cleanup: Events older than 7 days are removed automatically
+ * 
+ * EXAMPLE SCENARIO:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Event: "Tech Talk" at coordinates (6.7970, 79.8999), starts at 2:00 PM
+ * User: At coordinates (6.7950, 79.8950), current time is 1:58 PM
+ * 
+ * 1. Get user location: (6.7950, 79.8950) ✅
+ * 2. Calculate distance: 0.5 km ✅
+ * 3. Check if within 8km radius: Yes (0.5 ≤ 8) ✅
+ * 4. Check if starting soon: Yes (2 minutes away) ✅
+ * 5. Send notification: "Tech Talk is starting soon at Main Hall! You're 0.50 km away." ✅
+ * ===============================================================================
  */
 
 import { NOTIFICATION_RADIUS_KM, REMINDER_TIME_BEFORE_EVENT_MINUTES } from '@/constants/campus';

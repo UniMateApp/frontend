@@ -1,83 +1,111 @@
+// ========================================
+// LOST AND FOUND SERVICE LAYER
+// ========================================
+// This service handles all database operations for the Lost & Found feature:
+// - Fetching lost/found items (list and by ID)
+// - Creating new posts
+// - Marking items as resolved (soft delete)
+// - Hard deleting items
+// 
+// Database Schema (lost_found table):
+// - id: uuid (primary key)
+// - title: text (item name)
+// - description: text
+// - kind: text ('lost' or 'found')
+// - location: text ("latitude,longitude" format)
+// - contact: text (contact info)
+// - image_url: text (Supabase Storage URL)
+// - resolved: boolean (soft delete flag)
+// - created_by: uuid (user who posted)
+// - created_at: timestamp
+// - updated_at: timestamp
+// ========================================
+
 import { supabase as getSupabase } from './supabase';
 
-/** List all lost & found posts */
+// OPERATION 1: LIST ALL POSTS
+/** List all lost & found posts that are not resolved */
 export async function listLostFound() {
   const supabase = await getSupabase();
   const { data, error } = await supabase
-    .from('lost_found')
-    // Only return unresolved items by default
-    .select('*')
-    .eq('resolved', false)
-    .order('created_at', { ascending: false });
+    .from('lost_found') // Query the lost_found table
+    .select('*') // Select all columns
+    .eq('resolved', false) // Only return unresolved items (not soft-deleted)
+    .order('created_at', { ascending: false }); // Newest first
 
   if (error) throw error;
   return data;
 }
 
-/** Get a specific lost & found item by ID */
+// OPERATION 2: GET SINGLE POST BY ID
+/** Get a specific lost & found item by ID with field mapping */
 export async function getLostFoundItemById(id: string) {
   const supabase = await getSupabase();
   const { data, error } = await supabase
     .from('lost_found')
     .select('*')
-    // Only fetch if not resolved
-    .eq('resolved', false)
-    .eq('id', id)
-    .single();
+    .eq('resolved', false) // Only fetch if not resolved (not soft-deleted)
+    .eq('id', id) // Match the specific item ID
+    .single(); // Expect exactly one result
 
   if (error) throw error;
   
-  // Map database fields to interface fields for consistency
+  // FIELD MAPPING: Convert database schema to UI interface
+  // Database uses: title, kind, contact, resolved
+  // UI expects: item_name, type, contact_info, is_resolved
   if (data) {
     return {
       id: data.id,
-      item_name: data.title,
+      item_name: data.title, // title -> item_name
       description: data.description,
-      type: data.kind,
+      type: data.kind, // kind -> type
       location: data.location,
-      contact_info: data.contact,
+      contact_info: data.contact, // contact -> contact_info
       image_url: data.image_url,
       created_by: data.created_by,
       created_at: data.created_at,
       updated_at: data.updated_at,
-      is_resolved: data.resolved,
+      is_resolved: data.resolved, // resolved -> is_resolved
     };
   }
   
   return data;
 }
 
-/** Create a new lost/found post */
+// OPERATION 3: CREATE NEW POST
+/** Create a new lost/found post in the database */
 export async function createLostFound(payload: any) {
+  // Auto-populate created_by if not provided
   if (!payload.created_by) {
     try {
       const supabase = await getSupabase();
       const { data: userRes } = await supabase.auth.getUser();
-      payload.created_by = userRes?.user?.id ?? null;
+      payload.created_by = userRes?.user?.id ?? null; // Set to current user ID
     } catch {
-      // ignore if not logged in
+      // Ignore if not logged in (allow anonymous posts)
     }
   }
 
   const supabaseClient = await getSupabase();
   const { data, error } = await supabaseClient
     .from('lost_found')
-    .insert([payload])
-    .select()
-    .single();
+    .insert([payload]) // Insert the new post
+    .select() // Return the inserted row
+    .single(); // Expect single result
 
   if (error) throw error;
-  return data;
+  return data; // Returns the created post with database-generated fields
 }
 
-/** Mark a post as resolved */
+// OPERATION 4: SOFT DELETE (RESOLVE)
+/** Mark a post as resolved - This is a soft delete */
 export async function resolveLostFound(id: number) {
   const supabase = await getSupabase();
   const { data, error } = await supabase
     .from('lost_found')
-    .update({ resolved: true })
-    .eq('id', id)
-    .select()
+    .update({ resolved: true }) // Set resolved flag to true
+    .eq('id', id) // Match the specific item
+    .select() // Return updated row
     .single();
 
   if (error) throw error;

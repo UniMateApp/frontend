@@ -1,27 +1,46 @@
-import AddEventModal from '@/components/add-event-modal';
-import { EventCard } from '@/components/event-card';
-import { SearchBar } from '@/components/search-bar';
-import { Colors } from '@/constants/theme';
-import { useUser } from '@/contexts/UserContext';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useEventScheduler } from '@/hooks/useEventScheduler';
-import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService';
+// ===============================================================================
+// EVENTS SCREEN - EVENT LISTING WITH LOCATION-AWARE NOTIFICATIONS
+// ===============================================================================
+// This screen displays all university events, allows creating/deleting events,
+// and integrates with the location-aware notification system.
+
+// UI Components
+import AddEventModal from '@/components/add-event-modal'; // Modal for creating new events
+import { EventCard } from '@/components/event-card'; // Card component to display each event
+import { SearchBar } from '@/components/search-bar'; // Search input for filtering events
+
+// Theming and Context
+import { Colors } from '@/constants/theme'; // Light/dark theme colors
+import { useUser } from '@/contexts/UserContext'; // Access current user info
+import { useColorScheme } from '@/hooks/use-color-scheme'; // Detect light/dark mode
+
+// Location-Aware Notification System
+import { useEventScheduler } from '@/hooks/useEventScheduler'; // Auto-triggers location checks when events change
+import { isBackgroundTaskRegistered, registerBackgroundTask } from '@/services/backgroundTaskService'; // Background task that runs when app is closed
+
+// Event CRUD Operations
 import {
-  createEvent as apiCreateEvent,
-  deleteEvent as apiDeleteEvent,
-  listEvents as apiListEvents,
+  createEvent as apiCreateEvent, // Insert new event into database
+  deleteEvent as apiDeleteEvent, // Delete event from database (also removes from wishlists)
+  listEvents as apiListEvents, // Fetch all events from database
 } from '@/services/events';
-import { forceCheckLocation, sendTestNotification } from '@/services/immediateNotifier';
+
+// Notification Testing Functions
+import { forceCheckLocation, sendTestNotification } from '@/services/immediateNotifier'; // Manual location check and test notification
+
+// Wishlist Operations
 import {
-  Event,
-  addEventToWishlist,
-  getEventsWithWishlistStatus,
-  removeItemFromWishlist,
+  Event, // Event type definition
+  addEventToWishlist, // Add event to user's wishlist
+  getEventsWithWishlistStatus, // Fetch events with isInWishlist flag for current user
+  removeItemFromWishlist, // Remove event from user's wishlist
 } from '@/services/selectiveWishlist';
-import * as Location from 'expo-location';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+// External Libraries
+import * as Location from 'expo-location'; // GPS location access
+import { router, useFocusEffect } from 'expo-router'; // Navigation and screen focus detection
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'; // React hooks
+import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native'; // React Native UI components
 
 export default function EventsScreen() {
   const colorScheme = useColorScheme();
@@ -200,13 +219,15 @@ export default function EventsScreen() {
         console.log('[Events] Location services check not available');
       }
 
-      const { withinRadius, distance } = await forceCheckLocation();
-      Alert.alert(
-        'Location Check',
-        withinRadius
-          ? `✅ You are within campus radius!\nDistance: ${distance?.toFixed(2)} km`
-          : `⚠️ You are outside campus radius.\nDistance: ${distance?.toFixed(2)} km`
-      );
+      const result = await forceCheckLocation();
+      if (result.userLocation) {
+        Alert.alert(
+          'Location Check',
+          `📍 Current location: ${result.userLocation.latitude.toFixed(4)}, ${result.userLocation.longitude.toFixed(4)}`
+        );
+      } else {
+        Alert.alert('Location Check', '❌ Unable to get current location');
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to check location');
     }
@@ -226,7 +247,10 @@ export default function EventsScreen() {
     }
   };
 
+  // EVENT OPERATION 2: DELETE EVENT
+  /** Handle event deletion with confirmation - called from event card or details page */
   const handleDeleteEvent = (eventId: string, eventTitle: string) => {
+    // STEP 1: SHOW CONFIRMATION DIALOG
     Alert.alert(
       'Delete Event',
       `Are you sure you want to delete "${eventTitle}"? This action cannot be undone.`,
@@ -237,11 +261,14 @@ export default function EventsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // STEP 2: CALL SERVICE TO DELETE FROM DATABASE
               await apiDeleteEvent(eventId);
               Alert.alert('Success', 'Event deleted successfully!');
-              // Remove from local state immediately for better UX
+              
+              // STEP 3: UPDATE LOCAL STATE - Remove from list immediately for better UX
               setEventsWithWishlist(prev => prev.filter(e => e.id !== eventId));
-              // Also refresh from server to ensure consistency
+              
+              // STEP 4: REFRESH FROM SERVER - Ensure data consistency
               await loadEvents();
             } catch (err: any) {
               console.error('Failed to delete event:', err);
@@ -293,12 +320,16 @@ export default function EventsScreen() {
   );
 
 
+  // EVENT OPERATION 1: ADD NEW EVENT
+  /** Handle adding a new event - called when user submits add event modal */
   const handleAddEvent = async (ev: any) => {
     try {
+      // Call service layer to insert event into database
       const created = await apiCreateEvent(ev);
 
       if (created) {
         Alert.alert('Success', 'Event created successfully!');
+        // Reload events to show the new event in the list
         await loadEvents();
       }
     } catch (err: any) {
@@ -387,7 +418,7 @@ export default function EventsScreen() {
           latitude={e.latitude}
           longitude={e.longitude}
           imageUrl={e.image_url}
-          price={e.price !== null ? (e.price === 0 ? 'Free' : `LKR ${e.price.toFixed(2)}`) : undefined}
+          price={e.price !== null && e.price !== undefined ? (e.price === 0 ? 'Free' : `LKR ${e.price.toFixed(2)}`) : undefined}
           category={e.category}
           createdBy={e.created_by}
           onPress={() => handleEventPress(e.id)}

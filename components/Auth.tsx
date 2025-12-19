@@ -1,3 +1,14 @@
+// ========================================
+// AUTH COMPONENT - SIGN IN / SIGN UP FORM
+// ========================================
+// This component handles user authentication:
+// 1. Sign In: Email + Password
+// 2. Sign Up: Email + Password + Name (sends verification email)
+// 3. Profile Creation: Automatically creates profile after signup
+// 4. Error Handling: Displays user-friendly error messages
+// 5. Email Verification: Opens mail client for verification link
+// ========================================
+
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Colors } from '@/constants/theme'
@@ -6,39 +17,42 @@ import { ensureUserProfile, signInWithEmail as supabaseSignIn, signUpWithEmail a
 import React, { useEffect, useState } from 'react'
 import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-// Keep Supabase session refresh commented — kept for reference.
-
 export default function Auth() {
   const colorScheme = useColorScheme()
   const theme = Colors[colorScheme ?? 'light']
 
-  // Move AppState listener inside component to avoid invalid hook call
+  // Monitor app state changes (not currently used but kept for future session refresh)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async () => {
-      // noop; client-side refresh is handled elsewhere
+      // Client-side refresh is handled elsewhere
     })
 
     return () => subscription.remove()
   }, [])
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // FORM STATE - Track user inputs and UI state
+  const [email, setEmail] = useState('') // User's email address
+  const [password, setPassword] = useState('') // User's password
+  const [name, setName] = useState('') // Full name (sign up only)
+  const [loading, setLoading] = useState(false) // Loading state during auth
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin') // Toggle between sign in/up
+  const [errorMessage, setErrorMessage] = useState<string | null>(null) // Error message display
 
+  // OPERATION 1: SIGN IN - Authenticate existing user
   async function signInWithEmail() {
     setLoading(true)
-    setErrorMessage(null)
+    setErrorMessage(null) // Clear previous errors
     try {
+      // Call auth service to sign in with email/password
       const { data, error } = await supabaseSignIn(email, password)
       console.log('Sign in response:', { data, error })
+      
       if (error) {
-        setErrorMessage(error.message)
+        setErrorMessage(error.message) // Show error to user
       } else if (data?.user) {
-        // Ensure profile exists after successful sign in
+        // Ensure profile exists in profiles table (create if missing)
         await ensureUserProfile(data.user)
+        // UserContext will handle navigation to app after sign in
       }
     } catch (e: any) {
       setErrorMessage(e?.message ?? 'Sign in failed')
