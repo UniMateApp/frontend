@@ -423,7 +423,7 @@ export async function checkAndNotifyEvents(events: Event[]): Promise<void> {
       // ===== ELIGIBILITY CHECK 2: Event must have GPS coordinates =====
       if (event.latitude === undefined || event.latitude === null || 
           event.longitude === undefined || event.longitude === null) {
-        console.log(`[ImmediateNotifier] ⚠️ Event "${event.title}" has no location coordinates, skipping`);
+        console.log(`[ImmediateNotifier]  Event "${event.title}" has no location coordinates, skipping`);
         continue; // Cannot calculate distance without coordinates
       }
 
