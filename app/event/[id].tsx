@@ -67,13 +67,17 @@ export default function EventDetailsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // EVENT OPERATION 3: UPDATE EVENT
+  /** Handle event update - called when user submits edit modal */
   const handleUpdateEvent = async (updatedData: any) => {
     try {
       setUpdating(true);
+      // Call service layer to update event in database
       await updateEvent(id, updatedData);
       Alert.alert('Success', 'Event updated successfully!');
-      setShowEditModal(false);
-      // Refresh event data
+      setShowEditModal(false); // Close edit modal
+      
+      // Refresh event data to show updated values
       await fetchEvent();
     } catch (err: any) {
       console.error('Failed to update event:', err);
@@ -246,6 +250,8 @@ export default function EventDetailsScreen() {
     }
   };
 
+  // EVENT OPERATION 4: DELETE EVENT FROM DETAIL SCREEN
+  /** Handle event deletion with platform-specific confirmation dialogs */
   const handleDeleteEvent = async () => {
     console.log('=== DELETE BUTTON PRESSED ===');
     console.log('Event ID:', id);
@@ -262,7 +268,8 @@ export default function EventDetailsScreen() {
     console.log('Updating state:', updating);
     console.log('Delete button clicked, event ID:', id);
 
-    // 🧩 For Web (Alert is not supported natively)
+    // PLATFORM-SPECIFIC HANDLING
+    // WEB: Use browser confirm dialog (Alert.alert not supported on web)
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Are you sure you want to delete this event? This action cannot be undone.');
       if (!confirmed) {
@@ -274,12 +281,13 @@ export default function EventDetailsScreen() {
         console.log('Attempting to delete event with ID:', id);
         setUpdating(true);
 
+        // Call service layer to delete from database
         await deleteEvent(String(id));
         console.log('Event deleted successfully (Supabase)');
 
         window.alert('Event deleted successfully!');
         console.log('Navigating back to events list');
-        router.dismissTo('/(tabs)/events');
+        router.dismissTo('/(tabs)/events'); // Navigate back to events list
       } catch (err) {
         console.error('Failed to delete event:', err);
         const msg = err || 'Failed to delete event';
@@ -287,10 +295,10 @@ export default function EventDetailsScreen() {
       } finally {
         setUpdating(false);
       }
-      return; // stop here for web
+      return; // Stop here for web
     }
 
-    // 📱 For Mobile (Android / iOS)
+    // MOBILE: Use native Alert dialog for Android/iOS
     Alert.alert(
       'Delete Event',
       'Are you sure you want to delete this event? This action cannot be undone.',
@@ -304,9 +312,11 @@ export default function EventDetailsScreen() {
               console.log('Attempting to delete event with ID:', id);
               setUpdating(true);
 
+              // Call service layer to delete from database
               await deleteEvent(String(id));
               console.log('Event deleted from Supabase');
 
+              // Show success message and navigate back
               Alert.alert(
                 'Success',
                 'Event deleted successfully!',

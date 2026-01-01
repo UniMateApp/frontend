@@ -10,9 +10,9 @@ import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
 import { createLostFound, resolveLostFoundItem } from '../../services/lostFound';
 import {
-    addLostFoundToWishlist,
-    getLostFoundWithWishlistStatus,
-    removeItemFromWishlist
+  addLostFoundToWishlist,
+  getLostFoundWithWishlistStatus,
+  removeItemFromWishlist
 } from '../../services/selectiveWishlist';
 
 type Post = {
@@ -30,26 +30,41 @@ type Post = {
   isInWishlist?: boolean;
 };
 
+// ========================================
+// LOST AND FOUND FEATURE - MAIN SCREEN
+// ========================================
+// This component manages the Lost & Found feature where users can:
+// 1. View all lost/found items posted by the community
+// 2. Post new lost/found items with photos and location
+// 3. Filter items (All vs My Posts)
+// 4. Add items to wishlist for tracking
+// 5. Mark items as resolved when found/returned
+// ========================================
+
 export default function LostFoundScreen() {
-  const [modalVisible, setModalVisible] = useState(false);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
+  // STEP 1: INITIALIZATION - Setup state and UI controls
+  const [modalVisible, setModalVisible] = useState(false); // Controls the create post modal visibility
+  const [posts, setPosts] = useState<Post[]>([]); // Array of all lost/found posts with wishlist status
+  const [loading, setLoading] = useState(false); // Loading state while fetching posts
+  const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all'); // Filter: show all posts or only user's posts
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
 
-  const { user } = useUser();
+  const { user } = useUser(); // Current logged-in user
 
-  const open = () => setModalVisible(true);
-  const close = () => setModalVisible(false);
+  const open = () => setModalVisible(true); // Open create post modal
+  const close = () => setModalVisible(false); // Close create post modal
 
-  /** Fetch posts with wishlist status */
+  // STEP 2: LOAD POSTS - Fetch all lost/found items with wishlist status
+  /** Fetch posts with wishlist status from database */
   const loadPosts = useCallback(async () => {
     setLoading(true);
     try {
+      // This service function joins lost_found table with wishlist table
+      // to get all posts and check if each is in current user's wishlist
       const data = await getLostFoundWithWishlistStatus();
-      setPosts(data);
+      setPosts(data); // Update state with posts including isInWishlist flag
     } catch (err: any) {
       console.error('Failed to load posts', err);
       Alert.alert('Error', err.message || 'Failed to load posts');
@@ -58,48 +73,56 @@ export default function LostFoundScreen() {
     }
   }, []);
 
+  // STEP 3: REALTIME UPDATES - Load posts initially and subscribe to changes
   useEffect(() => {
-    loadPosts();
+    loadPosts(); // Initial load of all posts
     
-    // Subscribe to wishlist changes for real-time updates
+    // STEP 3A: REALTIME SUBSCRIPTION - Listen for wishlist changes
+    // When any user adds/removes items from wishlist, reload all posts
+    // This ensures the heart icons update in real-time across users
     const setupSubscription = async () => {
       const client = await supabase();
       const subscription = client
-        .channel('lost_found_wishlist_changes')
+        .channel('lost_found_wishlist_changes') // Unique channel name
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'selective_wishlist' },
+          { event: '*', schema: 'public', table: 'selective_wishlist' }, // Listen to all changes
           () => {
-            loadPosts();
+            loadPosts(); // Reload posts when wishlist changes
           }
         )
-        .subscribe();
+        .subscribe(); // Start listening
 
       return () => {
-        subscription.unsubscribe();
+        subscription.unsubscribe(); // Cleanup function
       };
     };
 
     const cleanup = setupSubscription();
     
+    // Cleanup on unmount
     return () => {
       cleanup.then(fn => fn?.());
     };
   }, [loadPosts]);
 
-  /** Add post */
+  // STEP 4: CREATE POST - Handle new lost/found item submission
+  /** Add post - Called when user submits the modal form */
   const handleAdd = async (post: any) => {
     try {
+      // STEP 4A: DATABASE INSERT - Map UI fields to database schema
+      // The database uses different field names (kind vs type, title vs item_name, etc.)
       const created = await createLostFound({
-        kind: post.type.toLowerCase(), // Database uses 'kind' field
-        title: post.title, // Database uses 'title' field
+        kind: post.type.toLowerCase(), // Database uses 'kind' field for 'lost' or 'found'
+        title: post.title, // Database uses 'title' field instead of 'item_name'
         description: post.description,
-        contact: post.contact, // Database uses 'contact' field
-        image_url: post.image_url, // Image URL from Supabase Storage
-        resolved: false, // Database uses 'resolved' field
-        location: post.location, // Location as string
+        contact: post.contact, // Database uses 'contact' field instead of 'contact_info'
+        image_url: post.image_url, // Image URL from Supabase Storage (already uploaded)
+        resolved: false, // Database uses 'resolved' field instead of 'is_resolved'
+        location: post.location, // Location as "latitude,longitude" string
       });
       
-      // Map database fields to expected interface fields
+      // STEP 4B: FIELD MAPPING - Convert database response back to UI format
+      // Map database fields to expected interface fields for UI consistency
       const mappedPost: Post = {
         id: created.id,
         item_name: created.title, // Map 'title' to 'item_name'
@@ -112,43 +135,49 @@ export default function LostFoundScreen() {
         created_at: created.created_at,
         updated_at: created.created_at, // Use created_at for updated_at
         is_resolved: created.resolved, // Map 'resolved' to 'is_resolved'
-        isInWishlist: false
+        isInWishlist: false // New posts are not in wishlist by default
       };
       
+      // STEP 4C: UPDATE UI - Add new post to the top of the list
       setPosts(prev => [mappedPost, ...prev]);
       Alert.alert('Success', 'Post added successfully!');
     } catch (err: any) {
       console.error('Failed to add post', err);
       Alert.alert('Error', err.message || 'Could not add post');
     } finally {
-      close();
+      close(); // Close the modal
     }
   };
 
-  /** Resolve post */
+  // STEP 5: RESOLVE POST - Mark item as found/returned
+  /** Resolve post - Updates the database to mark item as resolved */
   const handleResolve = async (id: string) => {
     try {
-      await resolveLostFoundItem(String(id));
+      await resolveLostFoundItem(String(id)); // Update 'resolved' field to true in database
+      // Update local state to reflect the change (item will be filtered out from display)
       setPosts(prev => prev.map(p => (p.id === id ? { ...p, is_resolved: true } : p)));
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Could not mark as resolved');
     }
   };
 
-  // Deletion handled via onResolve (mark resolved); no separate delete handler
+  // NOTE: Deletion is handled via marking as resolved; no separate hard delete functionality
 
+  // STEP 6: WISHLIST MANAGEMENT - Add/Remove items from user's wishlist
   /** Toggle wishlist for lost-found item */
   const handleWishlistToggle = async (id: string, isInWishlist: boolean) => {
     try {
       if (isInWishlist) {
+        // Remove from wishlist: Delete row from 'selective_wishlist' table
         await removeItemFromWishlist('lost_found', id);
         setPosts(prev => prev.map(p => (p.id.toString() === id ? { ...p, isInWishlist: false } : p)));
       } else {
+        // Add to wishlist: Insert row into 'selective_wishlist' table
         await addLostFoundToWishlist(id);
         setPosts(prev => prev.map(p => (p.id.toString() === id ? { ...p, isInWishlist: true } : p)));
       }
     } catch (error: any) {
-      // Cross-platform error handling
+      // Cross-platform error handling (web vs native)
       const message = error.message || 'Failed to update wishlist';
       if (typeof window !== 'undefined') {
         window.alert(message);
@@ -158,18 +187,22 @@ export default function LostFoundScreen() {
     }
   };
 
-  /** Navigate to item details */
+  // STEP 7: NAVIGATION - Navigate to detail view
+  /** Navigate to item details - Opens the detail screen for a specific lost/found item */
   const handleItemPress = (id: string) => {
-    router.push({ pathname: '/lost-found/[id]', params: { id } });
+    router.push({ pathname: '/lost-found/[id]', params: { id } }); // Dynamic route with item ID
   };
 
-  // Only show posts that are not resolved so "deleted" (resolved) items are hidden
+  // STEP 8: FILTERING - Apply filters to display appropriate posts
+  // Only show posts that are not resolved (resolved = soft deleted)
+  // Additionally filter by ownership if "My Posts" mode is active
   const data = useMemo(() => {
-    const base = posts.filter(p => !p.is_resolved);
+    const base = posts.filter(p => !p.is_resolved); // Hide resolved items
     if (filterMode === 'mine' && user?.id) {
+      // Filter to show only posts created by current user
       return base.filter(p => String(p.created_by) === String(user.id));
     }
-    return base;
+    return base; // Show all unresolved posts
   }, [posts, filterMode, user]);
 
   return (

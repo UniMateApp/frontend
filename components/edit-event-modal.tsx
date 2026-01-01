@@ -11,10 +11,23 @@ type Props = {
   initialData: any;
 };
 
+// ========================================
+// EDIT EVENT MODAL - UPDATE EVENT FORM
+// ========================================
+// This modal allows event owners to edit existing event details:
+// 1. Pre-populate form with existing event data
+// 2. Allow modification of title, category, organizer, date/time, location, description, price
+// 3. Validate and submit changes
+// 4. Update database via onUpdate callback
+// 
+// Note: This modal does NOT handle image upload (images can't be changed after creation)
+// ========================================
+
 export default function EditEventModal({ visible, onClose, onUpdate, initialData }: Props) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
+  // FORM STATE - Track all editable fields
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [organizer, setOrganizer] = useState('');
@@ -26,18 +39,18 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
 
-  // Populate form when modal opens with initial data
+  // STEP 1: POPULATE FORM - Load existing event data when modal opens
   useEffect(() => {
     if (visible && initialData) {
       setTitle(initialData.title || '');
       setCategory(initialData.category || '');
       setOrganizer(initialData.organizer || '');
       
-      // Format date from database timestamp
+      // Format date from database timestamp (ISO 8601 string)
       if (initialData.start_at) {
         const dateObj = new Date(initialData.start_at);
-        setDate(dateObj);
-        setTime(dateObj);
+        setDate(dateObj); // Set date picker
+        setTime(dateObj); // Set time picker
       } else {
         setDate(new Date());
         setTime(new Date());
@@ -46,11 +59,11 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
       setLocation(initialData.location || '');
       setDescription(initialData.description || '');
       
-      // Format price for display
+      // Format price for display in text input
       if (initialData.price === 0) {
-        setPrice('Free');
+        setPrice('Free'); // Show "Free" for zero price
       } else if (initialData.price !== null && initialData.price !== undefined) {
-        setPrice(String(initialData.price));
+        setPrice(String(initialData.price)); // Convert number to string
       } else {
         setPrice('Free');
       }
@@ -83,40 +96,44 @@ export default function EditEventModal({ visible, onClose, onUpdate, initialData
     return time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // STEP 2: SUBMIT CHANGES - Validate and send updates to parent component
   const submit = () => {
+    // VALIDATION: Ensure required fields are filled
     if (!title.trim()) {
       Alert.alert('Validation Error', 'Title is required');
       return;
     }
 
-    // Convert price to number
+    // STEP 2A: PRICE PARSING - Convert price string to number
     let priceValue: number | null = null;
     if (price) {
       const lower = String(price).toLowerCase().trim();
       if (lower === 'free' || lower === 'free admission') {
-        priceValue = 0;
+        priceValue = 0; // "Free" becomes 0
       } else {
         const parsed = parseFloat(String(price));
-        priceValue = isNaN(parsed) ? null : parsed;
+        priceValue = isNaN(parsed) ? null : parsed; // Parse or set to null
       }
     }
 
-    // Combine date and time into a single timestamp
+    // STEP 2B: COMBINE DATE AND TIME - Merge separate date/time into single timestamp
     const combinedDateTime = new Date(date);
     combinedDateTime.setHours(time.getHours());
     combinedDateTime.setMinutes(time.getMinutes());
     combinedDateTime.setSeconds(0);
 
+    // STEP 2C: BUILD UPDATE OBJECT - Only include modified fields
     const updatedEvent = {
       title: title.trim(),
       category: category.trim() || null,
       organizer: organizer.trim() || null,
-      start_at: combinedDateTime.toISOString(),
+      start_at: combinedDateTime.toISOString(), // Convert to ISO 8601 string
       location: location.trim() || null,
       description: description.trim() || null,
       price: priceValue,
     };
 
+    // STEP 2D: CALL PARENT CALLBACK - Send update to detail screen
     onUpdate(updatedEvent);
   };
 

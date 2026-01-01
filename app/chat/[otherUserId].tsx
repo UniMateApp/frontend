@@ -13,24 +13,26 @@ import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Lin
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ChatWithUserScreen() {
-  const { otherUserId } = useLocalSearchParams<{ otherUserId?: string }>();
-  const { user } = useUser();
+  // STEP 1: INITIALIZATION - Get route parameters and user context
+  const { otherUserId } = useLocalSearchParams<{ otherUserId?: string }>(); // Extract the other user's ID from route params
+  const { user } = useUser(); // Get current logged-in user from context
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [otherUserName, setOtherUserName] = useState('');
-  const [otherUserEmail, setOtherUserEmail] = useState('');
-  const [currentUserEmail, setCurrentUserEmail] = useState('');
-  const unsubscribeRef = useRef<(() => Promise<void>) | null>(null);
-  const listRef = useRef<FlatList<Message>>(null);
+  // STEP 2: STATE MANAGEMENT - Track conversation state, messages, and UI state
+  const [conversationId, setConversationId] = useState<string | null>(null); // Stores the conversation ID once created/found
+  const [messages, setMessages] = useState<Message[]>([]); // Array of all messages in the conversation
+  const [draft, setDraft] = useState(''); // Current message being typed
+  const [loading, setLoading] = useState(true); // Loading state while fetching initial data
+  const [sending, setSending] = useState(false); // Sending state for new messages
+  const [otherUserName, setOtherUserName] = useState(''); // Display name of the other user
+  const [otherUserEmail, setOtherUserEmail] = useState(''); // Email of the other user
+  const [currentUserEmail, setCurrentUserEmail] = useState(''); // Email of current user
+  const unsubscribeRef = useRef<(() => Promise<void>) | null>(null); // Ref to store realtime subscription cleanup function
+  const listRef = useRef<FlatList<Message>>(null); // Ref to FlatList for programmatic scrolling
 
   const isReady = useMemo(() => Boolean(user?.id && otherUserId), [user?.id, otherUserId]);
   const hasUnread = useMemo(
@@ -38,22 +40,26 @@ export default function ChatWithUserScreen() {
     [messages, user?.id],
   );
 
+  // STEP 3: LOAD OTHER USER'S PROFILE - Fetch profile info for display in chat header
   useEffect(() => {
     if (!otherUserId) return;
     (async () => {
       try {
+        // Fetch the other user's profile from the database
         const profile = await getProfile(String(otherUserId));
         const fallback = `User ${String(otherUserId).slice(0, 6)}`;
         const name = profile?.full_name || fallback;
         const email = profile?.email || '';
         
+        // Store profile information in state
         setOtherUserName(name);
         setOtherUserEmail(email);
         
         // Use email as title if available, otherwise use name
         const displayTitle = email || name;
-        navigation.setOptions({ title: displayTitle });
+        navigation.setOptions({ title: displayTitle }); // Update navigation header
       } catch {
+        // Fallback if profile fetch fails
         const fallback = `User ${String(otherUserId).slice(0, 6)}`;
         setOtherUserName(fallback);
         navigation.setOptions({ title: fallback });
@@ -61,65 +67,78 @@ export default function ChatWithUserScreen() {
     })();
   }, [navigation, otherUserId]);
 
+  // STEP 4: LOAD CURRENT USER INFO - Get current user's email for message display
   useEffect(() => {
     (async () => {
       const authUser = await getCurrentUser();
-      setCurrentUserEmail(authUser?.email || '');
+      setCurrentUserEmail(authUser?.email || ''); // Store current user's email
     })();
+    // Cleanup: Unsubscribe from realtime updates when component unmounts
     return () => {
       if (unsubscribeRef.current) {
-        unsubscribeRef.current().catch(() => {});
+        unsubscribeRef.current().catch(() => {}); // Call unsubscribe function to clean up Supabase subscription
       }
     };
   }, []);
 
+  // STEP 5: MAIN CHAT LOADING FLOW - Find/create conversation, fetch messages, and subscribe to updates
   useEffect(() => {
     if (!isReady) {
       setLoading(false);
       return;
     }
 
-    let cancelled = false;
+    let cancelled = false; // Flag to prevent state updates if component unmounts during async operations
     setLoading(true);
-    setMessages([]);
+    setMessages([]); // Clear any previous messages
 
     (async () => {
       try {
+        // STEP 5A: FIND OR CREATE CONVERSATION
+        // Check if a conversation exists between these two users, or create a new one
         const convo = await findOrCreateConversation(String(user!.id), String(otherUserId));
-        if (cancelled) return;
-        setConversationId(convo.id);
+        if (cancelled) return; // Exit if component unmounted
+        setConversationId(convo.id); // Store conversation ID for sending messages
 
+        // STEP 5B: FETCH INITIAL MESSAGES
+        // Load all existing messages in this conversation from the database
         const initial = await fetchMessages(convo.id);
         if (cancelled) return;
-        setMessages(initial);
-        await markMessagesRead(convo.id, String(user!.id));
+        setMessages(initial); // Populate the message list
+        await markMessagesRead(convo.id, String(user!.id)); // Mark all messages as read
 
+        // STEP 5C: SUBSCRIBE TO REALTIME UPDATES
+        // Clean up any existing subscription
         if (unsubscribeRef.current) {
           await unsubscribeRef.current();
         }
+        // Subscribe to new messages and message updates via Supabase realtime
         unsubscribeRef.current = subscribeToMessages(
           convo.id,
+          // Callback for NEW messages (INSERT events)
           msg => {
             console.log('[Chat] New message in UI:', msg.id);
-            setMessages(prev => [...prev, msg]);
+            setMessages(prev => [...prev, msg]); // Append new message to the list
             if (msg.sender_id !== user!.id) {
-              markMessagesRead(convo.id, String(user!.id)).catch(() => {});
+              markMessagesRead(convo.id, String(user!.id)).catch(() => {}); // Mark incoming messages as read
             }
           },
+          // Callback for UPDATED messages (UPDATE events, e.g., read status changes)
           msg => {
             console.log('[Chat] Message updated in UI:', msg.id);
-            setMessages(prev => prev.map(m => (m.id === msg.id ? msg : m)));
+            setMessages(prev => prev.map(m => (m.id === msg.id ? msg : m))); // Replace updated message
           },
         );
       } catch (err: any) {
         console.error('Chat load failed', err);
         Alert.alert('Chat unavailable', err?.message || 'Could not start chat');
-        router.back();
+        router.back(); // Navigate back on error
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoading(false); // Hide loading indicator
       }
     })();
 
+    // Cleanup function - set cancelled flag to prevent state updates after unmount
     return () => {
       cancelled = true;
     };
@@ -193,14 +212,21 @@ export default function ChatWithUserScreen() {
     );
   };
 
+  // STEP 6: MESSAGE PARSING - Parse location messages from text content
+  // Location messages are stored with a special prefix: "[LOCATION]latitude,longitude"
   const parseLocation = (content: string) => {
+    // Check if message content starts with location prefix
     if (!content.startsWith(LOCATION_PREFIX)) return null;
+    
+    // Extract coordinates by removing the prefix
     const raw = content.replace(LOCATION_PREFIX, '');
-    const parts = raw.split(',').map(p => Number(p.trim()));
+    const parts = raw.split(',').map(p => Number(p.trim())); // Split "lat,lng" and convert to numbers
+    
+    // Validate that we have exactly 2 valid numbers
     if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
       return { latitude: parts[0], longitude: parts[1] };
     }
-    return null;
+    return null; // Return null if not a valid location message
   };
 
   const openLocation = (lat: number, lng: number) => {
@@ -232,27 +258,33 @@ export default function ChatWithUserScreen() {
     );
   }
 
+  // STEP 7: MESSAGE RENDERING - Display each message with proper styling and parsing
   const renderItem = ({ item }: { item: Message }) => {
+    // Determine if message was sent by current user (for styling)
     const isCurrentUser = item.sender_id === user.id;
     const timestampColor = isCurrentUser ? 'rgba(255,255,255,0.8)' : colors.textSecondary;
     const senderEmail = isCurrentUser ? currentUserEmail : otherUserEmail;
+    
+    // PARSE MESSAGE CONTENT: Check if this is a location message or regular text
     const loc = parseLocation(item.content);
     
     return (
       <View
         style={[
           styles.bubble,
-          isCurrentUser ? styles.bubbleRight : styles.bubbleLeft,
+          isCurrentUser ? styles.bubbleRight : styles.bubbleLeft, // Align right for current user, left for other
           isCurrentUser ? { backgroundColor: colors.primary } : { backgroundColor: colors.card },
         ]}
       >
-        {/* Sender email identification */}
+        {/* Display sender's email above the message */}
         {senderEmail && (
           <Text style={[styles.senderEmail, { color: isCurrentUser ? 'rgba(255,255,255,0.85)' : colors.textSecondary }]}>
             {senderEmail}
           </Text>
         )}
+        {/* CONDITIONAL RENDERING: Show location link or text message */}
         {loc ? (
+          // If location message: Display as clickable location link
           <TouchableOpacity onPress={() => openLocation(loc.latitude, loc.longitude)}>
             <Text style={{ color: isCurrentUser ? '#fff' : colors.primary, fontWeight: '700' }}>
               Shared location
@@ -262,8 +294,10 @@ export default function ChatWithUserScreen() {
             </Text>
           </TouchableOpacity>
         ) : (
+          // If regular message: Display text content
           <Text style={{ color: isCurrentUser ? '#fff' : colors.text }}>{item.content}</Text>
         )}
+        {/* Display timestamp */}
         <Text style={[styles.timestamp, { color: timestampColor }]}>
           {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>

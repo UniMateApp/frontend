@@ -1,3 +1,14 @@
+// ========================================
+// ACCOUNT COMPONENT - USER PROFILE MANAGEMENT
+// ========================================
+// This component allows authenticated users to view and update their profile.
+// Features:
+// 1. Display user's email (read-only from auth)
+// 2. Edit username, website, and avatar URL
+// 3. Save changes to the profiles table
+// 4. Sign out functionality
+// ========================================
+
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { signOut } from '@/services/auth'
@@ -7,26 +18,32 @@ import { Alert, StyleSheet, View } from 'react-native'
 import { supabase as getSupabase } from '../services/supabase'
 
 export default function Account({ session }: { session: Session }) {
+  // PROFILE STATE - Track editable profile fields
   const [loading, setLoading] = useState(true)
   const [username, setUsername] = useState('')
   const [website, setWebsite] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
 
+  // STEP 1: LOAD PROFILE - Fetch user's profile data from database
   const getProfile = useCallback(async () => {
     try {
       setLoading(true)
       if (!session?.user) throw new Error('No user on the session!')
 
       const supabase = await getSupabase();
+      // Query profiles table for current user's data
       const { data, error, status } = await supabase
         .from('profiles')
-        .select(`username, website, avatar_url`)
-        .eq('id', session?.user.id)
-        .single()
+        .select(`username, website, avatar_url`) // Select only needed fields
+        .eq('id', session?.user.id) // Match by user ID
+        .single() // Expect exactly one result
+      
+      // 406 status means profile doesn't exist yet (acceptable)
       if (error && status !== 406) {
         throw error
       }
 
+      // Populate form fields with existing data
       if (data) {
         setUsername(data.username)
         setWebsite(data.website)
@@ -45,6 +62,7 @@ export default function Account({ session }: { session: Session }) {
     if (session) getProfile()
   }, [session, getProfile])
 
+  // STEP 2: UPDATE PROFILE - Save changes to database
   async function updateProfile({
     username,
     website,
@@ -58,16 +76,18 @@ export default function Account({ session }: { session: Session }) {
       setLoading(true)
       if (!session?.user) throw new Error('No user on the session!')
 
+      // Build update object with new values
       const updates = {
-        id: session?.user.id,
+        id: session?.user.id, // Required for upsert to match existing row
         username,
         website,
         avatar_url,
-        updated_at: new Date(),
+        updated_at: new Date(), // Track when profile was last modified
       }
 
-  const supabase = await getSupabase();
-  const { error } = await supabase.from('profiles').upsert(updates)
+      const supabase = await getSupabase();
+      // UPSERT: Update if exists, insert if not (though profile should exist)
+      const { error } = await supabase.from('profiles').upsert(updates)
 
       if (error) {
         throw error

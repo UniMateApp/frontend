@@ -1,5 +1,49 @@
 /**
- * Utility functions for calculating distances between geographic coordinates
+ * ===============================================================================
+ * DISTANCE CALCULATION UTILITIES
+ * ===============================================================================
+ * 
+ * PURPOSE:
+ * Calculate accurate distances between GPS coordinates using the Haversine formula.
+ * Essential for determining if user is within event notification radius.
+ * 
+ * HAVERSINE FORMULA EXPLANATION:
+ * ────────────────────────────────────────────────────────────────────────────
+ * The Haversine formula calculates the great-circle distance between two points
+ * on a sphere (Earth) given their latitudes and longitudes.
+ * 
+ * Formula Steps:
+ * 1. Convert latitude/longitude from degrees to radians
+ * 2. Calculate differences: dLat = lat2 - lat1, dLon = lon2 - lon1
+ * 3. Apply Haversine formula:
+ *    a = sin²(dLat/2) + cos(lat1) × cos(lat2) × sin²(dLon/2)
+ *    c = 2 × atan2(√a, √(1−a))
+ *    distance = R × c (where R = Earth's radius = 6371 km)
+ * 
+ * ACCURACY:
+ * - Assumes Earth is a perfect sphere (6371 km radius)
+ * - Accurate to within 0.5% for most distances
+ * - More accurate than simple Euclidean distance for geographic coordinates
+ * 
+ * USAGE IN NOTIFICATION SYSTEM:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Example: Check if user is near an event
+ * 
+ * User location: (6.7950, 79.8950)
+ * Event location: (6.7970, 79.8999)
+ * 
+ * distance = calculateHaversineDistance(6.7950, 79.8950, 6.7970, 79.8999)
+ * → Result: 0.52 km
+ * 
+ * isWithinRadius(6.7950, 79.8950, 6.7970, 79.8999, 8.0)
+ * → Result: true (0.52 km < 8 km)
+ * 
+ * CONFIGURATION:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Notification radius defined in: constants/campus.ts
+ * - NOTIFICATION_RADIUS_KM = 8 (8 kilometers)
+ * - Campus coordinates: University of Moratuwa (6.7970, 79.8999)
+ * ===============================================================================
  */
 
 /**

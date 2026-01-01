@@ -17,25 +17,39 @@ type Props = {
   onSubmit: (post: any) => void;
 };
 
+// ========================================
+// LOST AND FOUND MODAL - CREATE POST FORM
+// ========================================
+// This modal handles the complete flow for creating a lost/found post:
+// 1. User selects type (Lost or Found)
+// 2. User fills in item details (name, description, contact)
+// 3. User takes/selects a photo (required)
+// 4. Photo is uploaded to Supabase Storage
+// 5. User optionally selects location on map
+// 6. Post is submitted to database
+// 7. Notifications are sent to users who posted opposite type
+// ========================================
+
 export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const [type, setType] = useState<'Lost' | 'Found'>('Lost');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [contact, setContact] = useState('');
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [showPhotoOptions, setShowPhotoOptions] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [showMapPicker, setShowMapPicker] = useState(false);
+  // STEP 1: FORM STATE - Track all input fields for the post
+  const [type, setType] = useState<'Lost' | 'Found'>('Lost'); // Type of post: Lost or Found
+  const [title, setTitle] = useState(''); // Item name/title
+  const [description, setDescription] = useState(''); // Detailed description
+  const [contact, setContact] = useState(''); // Contact information
+  const [imageUrl, setImageUrl] = useState<string | null>(null); // Final Supabase Storage URL
+  const [showPhotoOptions, setShowPhotoOptions] = useState(false); // Show camera/gallery picker
+  const [uploading, setUploading] = useState(false); // Upload in progress
+  const [previewImage, setPreviewImage] = useState<string | null>(null); // Local preview URI
+  const [showPreview, setShowPreview] = useState(false); // Show preview screen
+  const [showMapPicker, setShowMapPicker] = useState(false); // Show map location picker
   const [selectedLocation, setSelectedLocation] = useState<{
     latitude: number;
     longitude: number;
     address?: string;
-  } | null>(null);
+  } | null>(null); // Selected location coordinates
 
   const isPostDisabled = !title.trim() || !description.trim() || !contact.trim() || !imageUrl;
 
@@ -58,33 +72,40 @@ export default function LostFoundModal({ visible, onClose, onSubmit }: Props) {
     };
   };
 
+// STEP 2: IMAGE UPLOAD - Upload selected photo to Supabase Storage
 const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
   try {
     setUploading(true);
 
-    const supabaseClient = await supabase(); // ✅ await
+    const supabaseClient = await supabase(); // Get Supabase client
 
+    // STEP 2A: GENERATE UNIQUE FILENAME
     const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `lost-found/${fileName}`;
+    const filePath = `lost-found/${fileName}`; // Store in lost-found folder
 
+    // STEP 2B: CONVERT IMAGE TO BINARY DATA
+    // Different approach for web vs mobile platforms
     let fileData: Uint8Array;
 
     if (Platform.OS === 'web') {
+      // Web: Fetch blob and convert to ArrayBuffer
       const response = await fetch(uri);
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
       fileData = new Uint8Array(arrayBuffer);
     } else {
+      // Mobile: Read as base64 and convert to binary
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
       fileData = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
     }
 
+    // STEP 2C: UPLOAD TO SUPABASE STORAGE
     const { data, error } = await supabaseClient.storage
-      .from('images')
+      .from('images') // 'images' bucket
       .upload(filePath, fileData, {
         contentType: `image/${fileExt}`,
-        upsert: false,
+        upsert: false, // Don't overwrite existing files
       });
 
     if (error) {
@@ -93,11 +114,12 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
       return null;
     }
 
+    // STEP 2D: GET PUBLIC URL - Retrieve the publicly accessible URL
     const { data: publicData } = supabaseClient.storage
       .from('images')
       .getPublicUrl(filePath);
 
-    return publicData.publicUrl;
+    return publicData.publicUrl; // Return URL to store in database
   } catch (error: any) {
     console.error('Upload failed:', error);
     Alert.alert('Upload Failed', error.message || 'Failed to upload image');
@@ -205,21 +227,23 @@ const uploadImageToSupabase = async (uri: string): Promise<string | null> => {
     console.log('📝 Submitting data with image:', post);
 
     try {
-      // Await the parent handler so we only notify after DB insert completes
-      const result = await onSubmit(post as any);
+      // STEP 3A: DATABASE INSERT - Call parent handler to insert post into database
+      const result = await onSubmit(post as any); // Wait for DB insert to complete
 
-      // After successful submission, notify other users who posted the opposite kind
+      // STEP 3B: SMART NOTIFICATIONS - Notify users who posted opposite type
+      // Example: If user posts "Found Wallet", notify users who posted "Lost Wallet"
       try {
         const client = await supabase();
-        // get current user id (may be null if anonymous)
+        // Get current user id (may be null if anonymous posting)
         let currentUserId: string | null = null;
         try {
           const { data: userRes } = await client.auth.getUser();
           currentUserId = userRes?.user?.id ?? null;
         } catch (e) {
-          // ignore
+          // Ignore if not logged in
         }
 
+        // Determine opposite type: Lost -> found, Found -> lost
         const oppositeKind = (type === 'Lost') ? 'found' : 'lost';
 
         const { data: others, error: fetchErr } = await client

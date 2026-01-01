@@ -1,3 +1,17 @@
+// ========================================
+// PROFILE SCREEN - USER PROFILE AND SETTINGS
+// ========================================
+// This screen shows:
+// 1. User avatar (initials-based)
+// 2. User name and email
+// 3. Settings menu:
+//    - Edit Profile
+//    - Notifications
+//    - Wishlist
+//    - Sign Out
+// 4. Pull-to-refresh functionality
+// ========================================
+
 import { Colors } from '@/constants/theme';
 import { useUser } from '@/contexts/UserContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -7,6 +21,7 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+// REUSABLE COMPONENT: Setting menu item with icon and arrow
 interface SettingItemProps {
   icon: React.ComponentProps<typeof FontAwesome>['name'];
   title: string;

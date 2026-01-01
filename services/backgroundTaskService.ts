@@ -1,6 +1,97 @@
 /**
- * Background task for periodic event checking
- * Runs every 1 minute to check if any events are starting in 2 minutes
+ * ===============================================================================
+ * BACKGROUND TASK SERVICE - PERIODIC EVENT CHECKING (APP CLOSED)
+ * ===============================================================================
+ * 
+ * PURPOSE:
+ * Runs EVERY MINUTE in the background (even when app is closed) to check if
+ * any events are starting in 2 minutes and send notifications.
+ * 
+ * HOW IT WORKS (BACKGROUND EXECUTION):
+ * ────────────────────────────────────────────────────────────────────────────
+ * 
+ * Step 1: REGISTRATION (registerBackgroundTask)
+ *   - Uses expo-background-fetch to register periodic task
+ *   - Task name: 'BACKGROUND_EVENT_CHECK_TASK'
+ *   - Frequency: Every 60 seconds (minimumInterval: 60)
+ *   - Settings:
+ *     → stopOnTerminate: false (keep running after app closes)
+ *     → startOnBoot: true (restart task after device reboot)
+ *   - OS may adjust frequency to save battery (not guaranteed exact timing)
+ * 
+ * Step 2: TASK EXECUTION (runs every minute)
+ *   a) Get cached events from AsyncStorage (@cached_events)
+ *      - Events were cached by useEventScheduler when list changed
+ *      - Contains: id, title, location, coordinates, start_at
+ *   
+ *   b) For each cached event:
+ *      - Check if already notified in last 24 hours (skip if yes)
+ *      - Check if event is starting in 2 minutes:
+ *        → Calculate time difference: eventTime - currentTime
+ *        → If between 1.5 and 2.5 minutes: eligible for notification
+ *      - If eligible, send immediate notification
+ *   
+ *   c) Mark notified events in AsyncStorage (@background_notified_events)
+ *      - Prevents duplicate notifications
+ *      - Cleanup old notifications (> 7 days) automatically
+ * 
+ * Step 3: NOTIFICATION SENDING
+ *   - Create notification with expo-notifications
+ *   - Title: "📍 Event Starting Soon!"
+ *   - Body: Event title, location name, "starting in 2 minutes"
+ *   - Priority: HIGH (Android)
+ *   - Sound: Enabled
+ *   - Trigger: null (send immediately, don't schedule)
+ * 
+ * KEY FEATURES:
+ * ────────────────────────────────────────────────────────────────────────────
+ * ✅ Works when app is FULLY CLOSED (not just in background)
+ * ✅ Survives device reboot (startOnBoot: true)
+ * ✅ Minimal battery impact (checks cached data, no API calls)
+ * ✅ No location checking (sends notification to all users)
+ * ✅ Automatic cleanup of old notifications (> 7 days)
+ * ✅ Prevents duplicate notifications (24-hour window)
+ * 
+ * LIMITATIONS:
+ * ────────────────────────────────────────────────────────────────────────────
+ * ❌ Does NOT check user location (sends to everyone)
+ * ❌ Timing not guaranteed (OS may delay/batch for battery saving)
+ * ❌ Requires events to be cached first (by foreground app)
+ * ❌ Android may kill task if device is low on memory
+ * ❌ iOS has stricter background execution limits
+ * 
+ * STORAGE:
+ * ────────────────────────────────────────────────────────────────────────────
+ * @cached_events: Array of event objects with start times
+ * @background_notified_events: Array of { eventId, notifiedAt }
+ * 
+ * USAGE:
+ * ────────────────────────────────────────────────────────────────────────────
+ * ```tsx
+ * // Register task when user enables background notifications
+ * await registerBackgroundTask();
+ * 
+ * // Check if task is running
+ * const isActive = await isBackgroundTaskRegistered();
+ * 
+ * // Unregister task
+ * await unregisterBackgroundTask();
+ * ```
+ * 
+ * PERMISSION REQUIREMENTS:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Notification permission (expo-notifications)
+ * - Background execution permission (granted automatically on Android)
+ * - Battery optimization exemption (user may need to configure manually)
+ * 
+ * DEBUGGING:
+ * ────────────────────────────────────────────────────────────────────────────
+ * All operations logged to console with [BackgroundTask] prefix:
+ * - Task trigger times
+ * - Events checked
+ * - Notifications sent
+ * - Errors and warnings
+ * ===============================================================================
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';

@@ -1,3 +1,19 @@
+// ========================================
+// MAP SCREEN - INTERACTIVE EVENT MAP
+// ========================================
+// This screen displays:
+// 1. Google Maps view of campus/area
+// 2. User's current location (blue marker)
+// 3. Event locations (red markers)
+// 4. Interactive markers with event info
+//
+// Features:
+// - Auto-center on user location
+// - Request location permissions
+// - Filter events with valid coordinates
+// - Tap markers to see event details
+// ========================================
+
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { listEvents } from '@/services/events';
@@ -9,18 +25,20 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 interface Event {
   id: string;
   title: string;
-  latitude?: number;
+  latitude?: number; // Event coordinates
   longitude?: number;
-  location_name?: string;
+  location_name?: string; // Human-readable location
   category?: string;
 }
 
 export default function MapScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // STATE MANAGEMENT
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null); // User's location
+  const [events, setEvents] = useState<Event[]>([]); // Events with valid coordinates
+  const [loading, setLoading] = useState(true); // Loading state
 
   useEffect(() => {
     (async () => {

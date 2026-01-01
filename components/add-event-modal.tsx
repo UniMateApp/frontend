@@ -1,25 +1,23 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase as getSupabase } from '@/services/supabase';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { FontAwesome } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import { 
-  ActivityIndicator,
-  Alert,
-  Image,
-  Keyboard, 
-  KeyboardAvoidingView, 
-  Modal, 
-  Platform, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  TouchableWithoutFeedback, 
-  View 
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import MapLocationPicker from './map-location-picker';
 
@@ -185,7 +183,9 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
     );
   };
 
+  // STEP 3: SUBMIT NEW EVENT - Validate, upload image, and create event
   const submit = async () => {
+    // STEP 3A: VALIDATION - Ensure all required fields are filled
     if (!isFormValid()) {
       Alert.alert('Incomplete Form', 'Please fill in all required fields including date, time, and location');
       return;
@@ -194,54 +194,57 @@ export default function AddEventModal({ visible, onClose, onAdd }: Props) {
     try {
       setUploading(true);
       
+      // STEP 3B: IMAGE UPLOAD - Upload photo to Supabase Storage if provided
       let imageUrl = null;
       if (imageUri) {
         try {
-          imageUrl = await uploadImage(imageUri);
+          imageUrl = await uploadImage(imageUri); // Upload and get public URL
         } catch (uploadError: any) {
           Alert.alert('Upload Failed', uploadError.message || 'Failed to upload image. Please try again.');
           setUploading(false);
-          return;
+          return; // Stop submission if image upload fails
         }
       }
 
-      // Parse price and convert to LKR format
+      // STEP 3C: PRICE PARSING - Convert price string to number (LKR)
       let priceValue: number | null = null;
       if (price.trim()) {
         const priceStr = price.trim().toLowerCase();
         if (priceStr === 'free') {
-          priceValue = 0;
+          priceValue = 0; // "Free" becomes 0
         } else {
-          // Remove any LKR, Rs, currency symbols
+          // Remove currency symbols (LKR, Rs) and parse number
           const numericPrice = priceStr.replace(/[^0-9.]/g, '');
           const parsed = parseFloat(numericPrice);
           priceValue = isNaN(parsed) ? null : parsed;
         }
       }
 
+      // STEP 3D: BUILD EVENT OBJECT - Combine all form data
       const newEvent = {
         title: title.trim(),
         category: category.trim(),
         organizer: organizer.trim(),
-        start_at: new Date(date.setHours(time.getHours(), time.getMinutes())).toISOString(),
-        end_at: null,
-        latitude: location!.latitude,
+        start_at: new Date(date.setHours(time.getHours(), time.getMinutes())).toISOString(), // Combine date + time
+        end_at: null, // End time not supported in current UI
+        latitude: location!.latitude, // From map picker
         longitude: location!.longitude,
         location_name: location!.address || 'Location on map',
         location: location!.address || 'Location on map',
         description: description.trim(),
         price: priceValue,
-        image_url: imageUrl,
-        attendees: [],
-        is_public: true,
-        is_resolved: false,
+        image_url: imageUrl, // Supabase Storage URL or null
+        attendees: [], // Empty array for new events
+        is_public: true, // All events are public
+        is_resolved: false, // Not resolved/deleted
       };
 
+      // STEP 3E: CALL PARENT CALLBACK - Send to events screen to insert in database
       await onAdd(newEvent);
       
-      // Reset form
+      // STEP 3F: RESET FORM - Clear all inputs for next use
       resetForm();
-      onClose();
+      onClose(); // Close modal
     } catch (error: any) {
       console.error('Error creating event:', error);
       Alert.alert('Error', error.message || 'Failed to create event');
